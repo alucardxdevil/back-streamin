@@ -40,7 +40,13 @@ app.use((err, req, res, next) => {
     })
 })
 
-app.listen(5000,  () => {
+const PORT = process.env.PORT || 5000
+
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK' });
+});
+
+app.listen(PORT,  () => {
     connect()
-    console.log("Connected on port 5000")
+    console.log(`Connected on port ${PORT}`)
 })
