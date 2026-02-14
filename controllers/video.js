@@ -172,10 +172,15 @@ export const search = async (req, res, next) => {
 
 export const getVideosByUser = async (req, res, next) => {
     try {
-        // Obtenemos el ID del usuario cuyos videos queremos ver
-        const {userId} = req.params;
+        const { slug } = req.params;
         
-        const videos = await Video.find({ userId }).sort({ createdAt: -1 });
+        // Primero obtener el usuario por slug
+        const user = await User.findOne({ slug });
+        if (!user) {
+            return res.status(404).json({ message: "Usuario no encontrado" });
+        }
+        
+        const videos = await Video.find({ userId: user._id.toString() }).sort({ createdAt: -1 });
         
         res.status(200).json(videos);
     } catch (err) {

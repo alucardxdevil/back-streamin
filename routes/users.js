@@ -4,14 +4,11 @@ import { verifyToken } from '../verifyToken.js';
 
 const router = express.Router()
 
+// get a user - DEBE IR ANTES de las rutas con :id/:userId
+router.get('/find/:slug', getUser)
+
 // update user
 router.put('/:id', verifyToken, updateUser)
-
-// delete user
-router.delete('/:id', verifyToken, deleteUser)
-
-// get a user
-router.get('/find/:id', getUser)
 
 router.get('/search', searchUsers)
 
@@ -29,9 +26,9 @@ router.put('/notlike/:videoId', verifyToken, notLike)
 router.put('/dislike/:videoId', verifyToken, dislike)
 router.put('/notdislike/:videoId', verifyToken, notDislike)
 
-// Totalviews
-router.put("/:userId/update-total-views", updateUserTotalViews);
-router.get("/:userId/total-views", getUserTotalViews);
+// Totalviews - actualizados para usar slug
+router.put("/:slug/update-total-views", updateUserTotalViews);
+router.get("/:slug/total-views", getUserTotalViews);
 
 
 export default router

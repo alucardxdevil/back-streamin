@@ -18,7 +18,9 @@ const UserSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: true
+        required: function () {
+            return !this.fromGoogle;
+    }
     },
     img: {
         type: String,
@@ -45,7 +47,6 @@ const UserSchema = new mongoose.Schema({
     },
     zip: { 
         type: Number,
-        required: [true, 'Zip code is required'],
         validate: {
             validator: function(v) {
                 return /^[0-9]{5}$/.test(v.toString());

@@ -34,7 +34,20 @@ export const deleteUser = async (req, res, next) => {
 
 export const getUser = async (req, res, next) => {
     try {
-        const user = await User.findById(req.params.id)
+        const { slug } = req.params;
+        
+        // Primero intentar buscar por slug
+        let user = await User.findOne({ slug });
+        
+        // Si no encuentra por slug, intentar por _id (para compatibilidad)
+        if (!user) {
+            user = await User.findById(slug);
+        }
+        
+        if (!user) {
+            return res.status(404).json({ message: "Usuario no encontrado" });
+        }
+        
         res.status(200).json(user)
     } catch (err) {
         next(err)
@@ -135,26 +148,28 @@ export const notDislike = async (req, res, next) => {
 
 export const updateUserTotalViews = async (req, res, next) => {
   try {
-    const { userId } = req.params;
+    const { slug } = req.params;
+
+    // Primero obtener el usuario por slug para obtener su _id
+    const user = await User.findOne({ slug });
+    if (!user) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
 
     const result = await Video.aggregate([
-      { $match: { userId: userId } }, 
+      { $match: { userId: user._id.toString() } }, 
       { $group: { _id: null, totalViews: { $sum: "$views" } } }
     ]);
 
     const totalViews = result.length > 0 ? result[0].totalViews : 0;
 
-    const updatedUser = await User.findByIdAndUpdate(
-      userId, // Aquí sí es ObjectId porque corresponde al _id del User
+    await User.findByIdAndUpdate(
+      user._id,
       { $set: { totalViews } },
       { new: true }
     );
 
-    if (!updatedUser) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
-    }
-
-    res.status(200).json({ userId, totalViews });
+    res.status(200).json({ slug, totalViews });
   } catch (err) {
     console.error("🔥 Error en updateUserTotalViews:", err);
     res.status(500).json({ message: "Error server", error: err.message });
@@ -164,7 +179,11 @@ export const updateUserTotalViews = async (req, res, next) => {
 // 🔹 Solo obtener el totalViews actual del usuario
 export const getUserTotalViews = async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.userId);
+    const { slug } = req.params;
+    const user = await User.findOne({ slug });
+    if (!user) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
     res.status(200).json({ totalViews: user?.totalViews || 0 });
   } catch (err) {
     next(err);

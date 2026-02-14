@@ -15,7 +15,7 @@ router.get('/random', random)
 router.get('/foll', verifyToken, foll)
 router.get('/fav', verifyToken, videoFavs)
 router.get('/filmlibrary', verifyToken, videoFilmLibrary)
-router.get('/second/:userId', getVideosByUser)
+router.get('/second/:slug', getVideosByUser)
 router.get('/tags', getByTag)
 router.get('/search', search)
 router.get('/top-liked', getTopLikedVideos);
