@@ -6,6 +6,7 @@ import userRoute from './routes/users.js'
 import videoRoute from './routes/videos.js'
 import commentRoute from './routes/comments.js'
 import authRoute from './routes/auth.js'
+import uploadRoute from './routes/upload.js'
 import cors from 'cors'
 
 
@@ -23,12 +24,13 @@ const connect = () => {
 }
 app.use(cookieParser())
 app.use(express.json())
-app.use('/api',cors())
+app.use(cors())
 
 app.use('/api/users', userRoute)
 app.use('/api/videos', videoRoute)
 app.use('/api/comments', commentRoute)
 app.use('/api/auth', authRoute)
+app.use('/api/upload', uploadRoute)
 
 app.use((err, req, res, next) => {
     const status = err.status || 500

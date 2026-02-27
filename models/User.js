@@ -53,6 +53,12 @@ const UserSchema = new mongoose.Schema({
             },
             message: props => `${props.value} is not a valid zip code! It should be exactly 5 digits.`
         }
+    },
+    socialLinks: {
+        twitter: { type: String, default: "" },
+        instagram: { type: String, default: "" },
+        facebook: { type: String, default: "" },
+        website: { type: String, default: "" }
     }
 },
 {

@@ -1,6 +1,8 @@
 import { createError } from "../err.js"
 import User from '../models/User.js'
 import Video from "../models/Video.js"
+import Playlist from "../models/Playlist.js"
+import mongoose from "mongoose"
 
 export const updateUser = async (req, res, next) => {
     if(req.params.id === req.user.id) {
@@ -100,6 +102,46 @@ export const like = async (req, res, next) => {
             $addToSet:{likes:id},
             $pull:{dislikes:id}
         })
+        
+        // Agregar video a la playlist de favoritos
+        const video = await Video.findById(videoId);
+        if (video) {
+            // Buscar si ya existe la playlist de favoritos
+            let favPlaylist = await Playlist.findOne({
+                userId: id,
+                name: 'Mis videos favoritos'
+            });
+            
+            if (!favPlaylist) {
+                // Crear la playlist si no existe
+                favPlaylist = new Playlist({
+                    userId: id,
+                    name: 'Mis videos favoritos',
+                    description: 'Videos que te han gustado',
+                    videos: [{
+                        videoId: new mongoose.Types.ObjectId(videoId),
+                        videoTitle: video.title,
+                        videoDuration: video.duration
+                    }]
+                });
+                await favPlaylist.save();
+            } else {
+                // Verificar si el video ya está en la playlist
+                const videoExists = favPlaylist.videos.some(
+                    v => v.videoId.toString() === videoId
+                );
+                if (!videoExists) {
+                    favPlaylist.videos.push({
+                        videoId: new mongoose.Types.ObjectId(videoId),
+                        videoTitle: video.title,
+                        videoDuration: video.duration
+                    });
+                    favPlaylist.updatedAt = new Date();
+                    await favPlaylist.save();
+                }
+            }
+        }
+        
         res.status(200).json('The video has been like')
     } catch (err) {
         next(err)
@@ -113,7 +155,17 @@ export const notLike = async (req, res, next) => {
         await Video.findByIdAndUpdate(videoId, {
             $pull:{likes:id}
         })
-        res.status(200).json('The video has been like')
+        
+        // Quitar video de la playlist de favoritos
+        await Playlist.findOneAndUpdate(
+            { userId: id, name: 'Mis videos favoritos' },
+            {
+                $pull: { videos: { videoId: new mongoose.Types.ObjectId(videoId) } },
+                $set: { updatedAt: new Date() }
+            }
+        );
+        
+        res.status(200).json('The video has been unliked')
     } catch (err) {
         next(err)
     }
@@ -185,6 +237,48 @@ export const getUserTotalViews = async (req, res, next) => {
       return res.status(404).json({ message: "Usuario no encontrado" });
     }
     res.status(200).json({ totalViews: user?.totalViews || 0 });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// 🔹 Obtener los usuarios más seguidos
+export const getTopFollowedUsers = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const users = await User.find({})
+      .sort({ follows: -1 })
+      .limit(limit)
+      .select('-password -email');
+    res.status(200).json(users);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// 🔹 Obtener los perfiles que sigue el usuario
+export const getFollowingUsers = async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    
+    // Buscar el usuario para obtener su lista de followsProfile
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+    
+    const followingIds = user.followsProfile || [];
+    
+    if (followingIds.length === 0) {
+      return res.status(200).json([]);
+    }
+    
+    // Obtener los datos de los usuarios seguidos
+    const followingUsers = await User.find({
+      _id: { $in: followingIds }
+    }).select('-password -email');
+    
+    res.status(200).json(followingUsers);
   } catch (err) {
     next(err);
   }

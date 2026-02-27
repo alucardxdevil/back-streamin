@@ -1,5 +1,5 @@
 import express from 'express';
-import { addVideo, addViews, deleteVideo, foll, getByTag, getTopDislikedVideos, getTopLikedVideos, getVideo, getVideosByUser, random, search, trend, updateVideo, videoFavs, videoFilmLibrary } from "../controllers/video.js";
+import { addVideo, addViews, deleteVideo, foll, getByTag, getTopDislikedVideos, getTopLikedVideos, getVideo, getVideosByUser, random, search, trend, updateVideo, videoFavs, videoFilmLibrary, getRecentVideos } from "../controllers/video.js";
 import { verifyToken } from '../verifyToken.js';
 
 const router = express.Router()
@@ -20,6 +20,7 @@ router.get('/tags', getByTag)
 router.get('/search', search)
 router.get('/top-liked', getTopLikedVideos);
 router.get('/top-disliked', getTopDislikedVideos);
+router.get('/recent', getRecentVideos);
 // router.get("/:userId/total-views", getUserTotalViews);
 // router.put('/:userId/update-total-views', updateUserTotalViews)
 

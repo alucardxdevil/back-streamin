@@ -241,3 +241,16 @@ export const getTopDislikedVideos = async (req, res, next) => {
     next(err);
   }
 }
+
+// 🔹 Obtener los videos más recientes
+export const getRecentVideos = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const videos = await Video.find({})
+      .sort({ createdAt: -1 })
+      .limit(limit);
+    res.status(200).json(videos);
+  } catch (err) {
+    next(err);
+  }
+}
