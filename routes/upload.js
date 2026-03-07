@@ -1,62 +1,64 @@
+/**
+ * Rutas para manejo de uploads con Backblaze B2
+ *
+ * Modo actual: Proxy (el archivo pasa por el servidor en memoria, nunca en disco)
+ * Modo ideal:  Subida directa cliente→B2 (requiere CORS en B2)
+ *              Ejecutar: node server/scripts/setup-b2-cors.js
+ *
+ * Rutas disponibles:
+ *  POST   /api/upload/image                  → sube imagen vía proxy
+ *  POST   /api/upload/video                  → sube video vía proxy
+ *  POST   /api/upload/generate-presigned-post → genera token para subida directa
+ *  DELETE /api/upload/file                   → elimina archivo de B2
+ */
+
 import express from 'express'
-import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import s3, { B2_BUCKET_NAME } from '../config/s3.js'
+import multer from 'multer'
 import { verifyToken } from '../verifyToken.js'
-import crypto from 'crypto'
+import {
+  generatePresignedPost,
+  uploadImage,
+  uploadVideo,
+  deleteFile,
+} from '../controllers/upload.js'
 
 const router = express.Router()
 
-// Generar URL firmada para subir un archivo (PUT)
-router.post('/presign/upload', verifyToken, async (req, res, next) => {
-  try {
-    const { fileName, contentType, folder } = req.body
-
-    if (!fileName || !contentType) {
-      return res.status(400).json({ message: 'fileName y contentType son requeridos' })
-    }
-
-    const uniqueName = `${folder ? folder + '/' : ''}${crypto.randomUUID()}-${fileName}`
-
-    const command = new PutObjectCommand({
-      Bucket: B2_BUCKET_NAME,
-      Key: uniqueName,
-      ContentType: contentType,
-    })
-
-    const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 })
-
-    res.status(200).json({
-      uploadUrl: signedUrl,
-      key: uniqueName,
-    })
-  } catch (err) {
-    next(err)
-  }
+// Multer en memoria — los bytes nunca tocan el disco del servidor
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 500 * 1024 * 1024, // 500 MB máximo
+  },
 })
 
-// Generar URL firmada para leer/descargar un archivo (GET)
-router.post('/presign/download', verifyToken, async (req, res, next) => {
-  try {
-    const { key } = req.body
+/**
+ * POST /api/upload/image
+ * Sube imagen a B2 a través del servidor (proxy).
+ * Body: multipart/form-data con campo "file"
+ */
+router.post('/image', verifyToken, upload.single('file'), uploadImage)
 
-    if (!key) {
-      return res.status(400).json({ message: 'key es requerido' })
-    }
+/**
+ * POST /api/upload/video
+ * Sube video a B2 a través del servidor (proxy).
+ * Body: multipart/form-data con campo "file"
+ */
+router.post('/video', verifyToken, upload.single('file'), uploadVideo)
 
-    const command = new GetObjectCommand({
-      Bucket: B2_BUCKET_NAME,
-      Key: key,
-    })
+/**
+ * POST /api/upload/generate-presigned-post
+ * Genera presigned POST para subida directa cliente→B2.
+ * Requiere CORS configurado en B2 (node server/scripts/setup-b2-cors.js)
+ * Body: { fileName, contentType, fileSize }
+ */
+router.post('/generate-presigned-post', verifyToken, generatePresignedPost)
 
-    const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 })
-
-    res.status(200).json({
-      downloadUrl: signedUrl,
-    })
-  } catch (err) {
-    next(err)
-  }
-})
+/**
+ * DELETE /api/upload/file
+ * Elimina archivo de B2.
+ * Body: { fileKey }
+ */
+router.delete('/file', verifyToken, deleteFile)
 
 export default router
