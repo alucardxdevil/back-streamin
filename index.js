@@ -48,23 +48,28 @@ if (!isProduction) {
 
 app.use(cors({
   origin: (origin, callback) => {
-    // En desarrollo, ser permisivo para facilitar el desarrollo local
+    // 1. Permitir peticiones sin origin (como apps móviles o herramientas de postman)
+    if (!origin) return callback(null, true);
+
+    // 2. En desarrollo, permitir todo
     if (!isProduction) {
-      return callback(null, true)
+      return callback(null, true);
     }
-    // En producción: verificar origin estrictamente
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true)
+
+    // 3. En producción, validar contra el array de .env
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      logger.warn('CORS bloqueado', { origin });
+      const corsError = new Error('No permitido por CORS');
+      corsError.status = 403;
+      return callback(corsError);
     }
-    logger.warn('CORS bloqueado', { origin })
-    const corsError = new Error('No permitido por CORS')
-    corsError.status = 403
-    callback(corsError)
   },
-  origin: allowedOrigins,
-  credentials: true,
+  credentials: true, // VITAL: Mantiene la conexión de cookies abierta
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Token', 'Range'],
+  exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length'],
 }))
 
 // ── Middlewares globales ───────────────────────────────────────────────────────
