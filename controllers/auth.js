@@ -44,7 +44,10 @@ export const signin = async (req, res, next) => {
 
         res.cookie('access_token', token, {
             httpOnly: true,
-            maxAge: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30
+            secure: true,
+            sameSite: 'none',
+            domain: '.stream-in.com',
+            maxAge: 30 * 24 * 60 * 60 * 1000 // 30 días
         }).status(200).json(others)
 
     } catch (err) {
@@ -59,7 +62,11 @@ export const googleAuth = async (req, res, next) => {
             const token = jwt.sign({id: user._id}, JWT)
 
             res.cookie('access_token', token, {
-                httpOnly: true
+                httpOnly: true,
+                secure: true,
+                sameSite: 'none',
+                domain: '.stream-in.com',
+                maxAge: 30 * 24 * 60 * 60 * 1000 // 30 días
             }).status(200).json(user._doc)
         } else {
             const newUser = new User({

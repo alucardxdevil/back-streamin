@@ -61,10 +61,10 @@ app.use(cors({
     corsError.status = 403
     callback(corsError)
   },
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Token', 'Range'],
-  exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length'],
 }))
 
 // ── Middlewares globales ───────────────────────────────────────────────────────
