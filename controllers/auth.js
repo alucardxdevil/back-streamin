@@ -78,7 +78,10 @@ export const googleAuth = async (req, res, next) => {
 
             res.cookie('access_token', token, {
                 httpOnly: true,
-                maxAge: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30
+                secure: true,
+                sameSite: 'none',
+                domain: '.stream-in.com',
+                maxAge: 30 * 24 * 60 * 60 * 1000 // 30 días
             }).status(200).json(savedUser._doc)
         }
     } catch (err) {
