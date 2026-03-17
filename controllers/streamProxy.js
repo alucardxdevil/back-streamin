@@ -198,8 +198,16 @@ export const proxyVideoMaster = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Video no encontrado' })
     }
 
-    // Verificar que el video esté listo
-    if (video.status !== 'ready') {
+    // Verificar que el video tenga algún archivo reproducible.
+    // Solo rechazar si el video está en estado 'processing' (transcodificación activa)
+    // y NO tiene un archivo de video directo como fallback.
+    // Videos con videoUrl/videoKey siempre pueden reproducirse (son archivos directos en B2).
+    // Videos con hlsMasterUrl y status 'ready' se reproducen via HLS.
+    const hasDirectVideo = video.videoUrl || video.videoKey
+    const hasHLS = video.hlsMasterUrl && video.status === 'ready'
+    
+    if (!hasDirectVideo && !hasHLS) {
+      // El video está en proceso de transcodificación y no tiene archivo directo
       logVideoAccess({
         ip, resource: videoId, authorized: false,
         reason: `Video no disponible (status: ${video.status})`, origin, referer,
@@ -213,12 +221,13 @@ export const proxyVideoMaster = async (req, res, next) => {
     }
 
     // Determinar el key del archivo a servir
+    // Priorizar HLS si está disponible y listo, sino usar video directo
     let fileKey = null
 
-    if (video.hlsMasterUrl) {
+    if (hasHLS) {
       fileKey = extractB2Key(video.hlsMasterUrl)
     } else if (video.videoKey) {
-      // Fallback para videos legacy (no HLS)
+      // Video directo en B2 (legacy o fallback mientras se transcodifica)
       fileKey = video.videoKey
     }
 
