@@ -249,14 +249,19 @@ const transcodeToHLS = (inputPath, outputDir, onProgress) => {
     const varStreamMap = HLS_PROFILES.map((_, i) => `v:${i},a:${i}`).join(' ')
 
     command = command
-      .addOption('-f hls')
-      .addOption('-hls_time 6')                          // Segmentos de 6 segundos
-      .addOption('-hls_playlist_type vod')               // VOD (no live)
-      .addOption('-hls_flags independent_segments')      // Segmentos independientes
-      .addOption('-hls_segment_type mpegts')             // Formato .ts
-      .addOption(`-hls_segment_filename ${outputDir}/%v/seg%03d.ts`)
-      .addOption('-master_pl_name master.m3u8')
-      .addOption(`-var_stream_map "${varStreamMap}"`)
+      .outputOptions([
+        '-f', 'hls',
+        '-hls_time', '6',                                // Segmentos de 6 segundos
+        '-hls_playlist_type', 'vod',                     // VOD (no live)
+        '-hls_flags', 'independent_segments',            // Segmentos independientes
+        '-hls_segment_type', 'mpegts',                   // Formato .ts
+        '-hls_segment_filename', `${outputDir}/%v/seg%03d.ts`,
+        '-master_pl_name', 'master.m3u8',
+        // IMPORTANTE: No envolver varStreamMap en comillas dobles.
+        // fluent-ffmpeg pasa cada elemento del array como argumento separado
+        // al proceso de FFmpeg, así que las comillas se incluirían literalmente.
+        '-var_stream_map', varStreamMap,
+      ])
       .output(`${outputDir}/%v/stream.m3u8`)
 
     command
