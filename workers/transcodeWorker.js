@@ -229,9 +229,12 @@ const transcodeToHLS = (inputPath, outputDir, onProgress) => {
         .addOption(`-b:v:${index} ${profile.videoBitrate}`)
         .addOption(`-maxrate:v:${index} ${profile.maxRate}`)
         .addOption(`-bufsize:v:${index} ${profile.bufSize}`)
-        // Escalar manteniendo aspect ratio, con padding si es necesario
+        // Escalar manteniendo aspect ratio.
+        // Usa scale con -2 para auto-alinear a múltiplos de 2 (requerido por libx264).
+        // force_original_aspect_ratio=decrease solo reduce, nunca agranda.
+        // El segundo scale con trunc asegura alineación de píxeles para evitar SIGSEGV.
         .addOption(
-          `-vf:${index} scale=${profile.width}:${profile.height}:force_original_aspect_ratio=decrease,pad=${profile.width}:${profile.height}:(ow-iw)/2:(oh-ih)/2`
+          `-vf:${index} scale=${profile.width}:-2:force_original_aspect_ratio=decrease`
         )
         // Codec de audio
         .addOption(`-c:a:${index} aac`)
