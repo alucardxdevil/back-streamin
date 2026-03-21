@@ -22,7 +22,6 @@
 import { Worker } from 'bullmq'
 import mongoose from 'mongoose'
 import ffmpeg from 'fluent-ffmpeg'
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { createReadStream, createWriteStream } from 'fs'
 import { mkdir, rm, readdir, stat } from 'fs/promises'
@@ -35,8 +34,8 @@ import { QUEUE_NAME } from '../queues/transcodeQueue.js'
 dotenv.config({ path: new URL('../../.env', import.meta.url).pathname })
 
 // ─── Configuración FFmpeg ─────────────────────────────────────────────────────
-// Usar ffmpeg del sistema si está disponible, sino usar el instalador
-const ffmpegPath = process.env.FFMPEG_PATH || ffmpegInstaller.path
+// Usar FFmpeg del sistema (instalado via apt en el contenedor Docker)
+const ffmpegPath = process.env.FFMPEG_PATH || '/usr/bin/ffmpeg'
 ffmpeg.setFfmpegPath(ffmpegPath)
 console.log(`[Worker] FFmpeg path: ${ffmpegPath}`)
 

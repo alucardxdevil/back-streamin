@@ -5,3 +5,8 @@ build
 logs/
 *.log
 .env.example
+.dockerignore
+Dockerfile
+docker-compose.yml
+Dockerfile.worker
+docker-compose.example.yml
