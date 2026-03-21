@@ -21,7 +21,7 @@
 
 import { Worker } from 'bullmq'
 import mongoose from 'mongoose'
-import ffmpeg from 'fluent-ffmpeg'
+import { spawn } from 'child_process'
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { createReadStream, createWriteStream } from 'fs'
 import { mkdir, rm, readdir, stat } from 'fs/promises'
@@ -35,8 +35,8 @@ dotenv.config({ path: new URL('../../.env', import.meta.url).pathname })
 
 // ─── Configuración FFmpeg ─────────────────────────────────────────────────────
 // Usar FFmpeg del sistema (instalado via apt en el contenedor Docker)
+// Se usa child_process.spawn directamente para control total de argumentos
 const ffmpegPath = process.env.FFMPEG_PATH || '/usr/bin/ffmpeg'
-ffmpeg.setFfmpegPath(ffmpegPath)
 console.log(`[Worker] FFmpeg path: ${ffmpegPath}`)
 
 // ─── Configuración B2 ─────────────────────────────────────────────────────────
@@ -196,7 +196,8 @@ const deleteB2Prefix = async (prefix) => {
 
 /**
  * Transcodifica el video con FFmpeg a HLS multi-bitrate.
- * Genera todos los perfiles en paralelo en un solo pase de FFmpeg.
+ * Usa child_process.spawn directamente para tener control total sobre los
+ * argumentos de FFmpeg (fluent-ffmpeg deduplicaba las opciones -map repetidas).
  *
  * @param {string} inputPath  - Ruta del MP4 de entrada
  * @param {string} outputDir  - Directorio de salida para los segmentos HLS
@@ -207,92 +208,125 @@ const transcodeToHLS = (inputPath, outputDir, onProgress) => {
   return new Promise((resolve, reject) => {
     let duration = 0
 
-    // Construir el comando FFmpeg con todos los perfiles
-    let command = ffmpeg(inputPath)
-      .inputOptions([
-        '-hide_banner',
-        '-loglevel warning',
-      ])
+    // ── Construir array de argumentos para FFmpeg ──────────────────────────
+    const args = [
+      '-hide_banner',
+      '-loglevel', 'info',
+      '-progress', 'pipe:1',       // Enviar progreso a stdout
+      '-i', inputPath,
+    ]
 
-    // Agregar cada perfil de calidad
+    // Agregar -map y opciones por cada perfil de calidad
     HLS_PROFILES.forEach((profile, index) => {
-      // Crear directorio para este perfil
-      const profileDir = join(outputDir, profile.name)
+      args.push(
+        '-map', '0:v:0',           // Mapear primer stream de video
+        '-map', '0:a:0',           // Mapear primer stream de audio
+      )
+    })
 
-      command = command
-        // Mapear video y audio para este stream
-        .addOption(`-map 0:v`)
-        .addOption(`-map 0:a`)
-        // Codec de video
-        .addOption(`-c:v:${index} libx264`)
-        .addOption(`-b:v:${index} ${profile.videoBitrate}`)
-        .addOption(`-maxrate:v:${index} ${profile.maxRate}`)
-        .addOption(`-bufsize:v:${index} ${profile.bufSize}`)
-        // Escalar manteniendo aspect ratio.
-        // Usa scale con -2 para auto-alinear a múltiplos de 2 (requerido por libx264).
-        // force_original_aspect_ratio=decrease solo reduce, nunca agranda.
-        // El segundo scale con trunc asegura alineación de píxeles para evitar SIGSEGV.
-        .addOption(
-          `-vf:${index} scale=${profile.width}:-2:force_original_aspect_ratio=decrease`
-        )
-        // Codec de audio
-        .addOption(`-c:a:${index} aac`)
-        .addOption(`-b:a:${index} ${profile.audioBitrate}`)
+    // Opciones de codec por perfil
+    HLS_PROFILES.forEach((profile, index) => {
+      args.push(
+        `-c:v:${index}`, 'libx264',
+        `-b:v:${index}`, profile.videoBitrate,
+        `-maxrate:v:${index}`, profile.maxRate,
+        `-bufsize:v:${index}`, profile.bufSize,
+        `-filter:v:${index}`, `scale=${profile.width}:-2`,
+        `-c:a:${index}`, 'aac',
+        `-b:a:${index}`, profile.audioBitrate,
+      )
     })
 
     // Opciones globales de optimización
-    command = command
-      .addOption('-preset fast')        // Balance velocidad/calidad
-      .addOption('-g 48')               // GOP = 2 * framerate (asumiendo 24fps)
-      .addOption('-sc_threshold 0')     // Deshabilitar scene change detection
-      .addOption('-keyint_min 48')      // Keyframe mínimo consistente
+    args.push(
+      '-preset', 'fast',
+      '-g', '48',
+      '-sc_threshold', '0',
+      '-keyint_min', '48',
+    )
 
     // Configuración HLS
-    const varStreamMap = HLS_PROFILES.map((_, i) => `v:${i},a:${i}`).join(' ')
+    // Usar name: para que %v se reemplace con 1080p, 720p, 480p (no 0, 1, 2)
+    const varStreamMap = HLS_PROFILES.map((p, i) => `v:${i},a:${i},name:${p.name}`).join(' ')
 
-    command = command
-      .outputOptions([
-        '-f', 'hls',
-        '-hls_time', '6',                                // Segmentos de 6 segundos
-        '-hls_playlist_type', 'vod',                     // VOD (no live)
-        '-hls_flags', 'independent_segments',            // Segmentos independientes
-        '-hls_segment_type', 'mpegts',                   // Formato .ts
-        '-hls_segment_filename', `${outputDir}/%v/seg%03d.ts`,
-        '-master_pl_name', 'master.m3u8',
-        // IMPORTANTE: No envolver varStreamMap en comillas dobles.
-        // fluent-ffmpeg pasa cada elemento del array como argumento separado
-        // al proceso de FFmpeg, así que las comillas se incluirían literalmente.
-        '-var_stream_map', varStreamMap,
-      ])
-      .output(`${outputDir}/%v/stream.m3u8`)
+    args.push(
+      '-f', 'hls',
+      '-hls_time', '6',
+      '-hls_playlist_type', 'vod',
+      '-hls_flags', 'independent_segments',
+      '-hls_segment_type', 'mpegts',
+      '-hls_segment_filename', `${outputDir}/%v/seg%03d.ts`,
+      '-master_pl_name', 'master.m3u8',
+      '-var_stream_map', varStreamMap,
+      `${outputDir}/%v/stream.m3u8`,
+    )
 
-    command
-      .on('start', (cmdLine) => {
-        console.log('[FFmpeg] Iniciando transcodificación')
-        console.log('[FFmpeg] Comando:', cmdLine.substring(0, 200) + '...')
-      })
-      .on('codecData', (data) => {
-        // Extraer duración del video
-        if (data.duration) {
-          const parts = data.duration.split(':')
-          duration = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2])
-        }
-      })
-      .on('progress', (progress) => {
-        const percent = Math.min(Math.round(progress.percent || 0), 95)
+    console.log('[FFmpeg] Iniciando transcodificación')
+    console.log('[FFmpeg] Comando:', ffmpegPath, args.join(' ').substring(0, 300) + '...')
+
+    // ── Ejecutar FFmpeg con spawn ──────────────────────────────────────────
+    const proc = spawn(ffmpegPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+
+    let stderrOutput = ''
+
+    // Parsear progreso desde stdout (-progress pipe:1)
+    proc.stdout.on('data', (data) => {
+      const text = data.toString()
+
+      // Extraer duración total del video
+      const durationMatch = text.match(/duration=(\d+:\d+:\d+\.\d+)/)
+      if (durationMatch) {
+        const parts = durationMatch[1].split(':')
+        duration = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2])
+      }
+
+      // Extraer tiempo actual procesado
+      const outTimeMatch = text.match(/out_time_us=(\d+)/)
+      if (outTimeMatch && duration > 0) {
+        const currentSeconds = parseInt(outTimeMatch[1]) / 1000000
+        const percent = Math.min(Math.round((currentSeconds / duration) * 100), 95)
         onProgress(percent)
-        console.log(`[FFmpeg] Progreso: ${percent}% — ${progress.timemark || ''}`)
-      })
-      .on('end', () => {
-        console.log('[FFmpeg] Transcodificación completada')
+      }
+
+      // Detectar progreso=end
+      if (text.includes('progress=end')) {
+        onProgress(95)
+      }
+    })
+
+    // Capturar stderr para diagnóstico
+    proc.stderr.on('data', (data) => {
+      const text = data.toString()
+      stderrOutput += text
+
+      // Extraer duración del input desde stderr (línea "Duration: HH:MM:SS.xx")
+      const durMatch = text.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/)
+      if (durMatch && duration === 0) {
+        duration = parseInt(durMatch[1]) * 3600 + parseInt(durMatch[2]) * 60 + parseFloat(durMatch[3])
+        console.log(`[FFmpeg] Duración detectada: ${duration}s`)
+      }
+
+      // Mostrar líneas de warning/error
+      if (text.includes('Error') || text.includes('error') || text.includes('Warning')) {
+        console.log(`[FFmpeg] stderr: ${text.trim().substring(0, 200)}`)
+      }
+    })
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        console.log('[FFmpeg] Transcodificación completada exitosamente')
         resolve(duration)
-      })
-      .on('error', (err, stdout, stderr) => {
-        console.error('[FFmpeg] Error:', err.message)
-        console.error('[FFmpeg] stderr:', stderr?.substring(0, 500))
-        reject(new Error(`FFmpeg falló: ${err.message}`))
-      })
-      .run()
+      } else {
+        console.error(`[FFmpeg] Proceso terminó con código ${code}`)
+        console.error('[FFmpeg] Últimas líneas stderr:', stderrOutput.substring(stderrOutput.length - 500))
+        reject(new Error(`FFmpeg terminó con código ${code}`))
+      }
+    })
+
+    proc.on('error', (err) => {
+      console.error('[FFmpeg] Error al iniciar proceso:', err.message)
+      reject(new Error(`No se pudo iniciar FFmpeg: ${err.message}`))
+    })
   })
 }
 
