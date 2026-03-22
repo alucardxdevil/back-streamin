@@ -6,17 +6,21 @@
  *
  * Responsabilidades:
  *  1. Descargar MP4 original desde Backblaze B2
- *  2. Transcodificar con FFmpeg a HLS multi-bitrate (1080p, 720p, 480p)
- *  3. Subir todos los segmentos HLS a B2
- *  4. Eliminar el MP4 original de B2 (ahorro de storage)
- *  5. Limpiar archivos temporales del disco local
- *  6. Actualizar el documento Video en MongoDB
+ *  2. Detectar resolución original con ffprobe
+ *  3. Filtrar perfiles dinámicamente (nunca escalar hacia arriba)
+ *  4. Transcodificar con FFmpeg a HLS multi-bitrate (CRF + perfiles adaptativos)
+ *  5. Subir todos los segmentos HLS a B2
+ *  6. Eliminar el MP4 original de B2 (ahorro de storage)
+ *  7. Limpiar archivos temporales del disco local
+ *  8. Actualizar el documento Video en MongoDB
  *
  * Optimizaciones de recursos:
  *  - Descarga MP4 a /tmp/ (no en RAM)
  *  - Upload HLS con streams (no carga todo en RAM)
  *  - Limpieza garantizada de /tmp/ incluso en caso de error
  *  - Concurrencia configurable via WORKER_CONCURRENCY
+ *  - CRF para mejor compresión sin sacrificar calidad
+ *  - No upscale: solo genera perfiles ≤ resolución original
  */
 
 import { Worker } from 'bullmq'
@@ -33,11 +37,11 @@ import { QUEUE_NAME } from '../queues/transcodeQueue.js'
 
 dotenv.config({ path: new URL('../../.env', import.meta.url).pathname })
 
-// ─── Configuración FFmpeg ─────────────────────────────────────────────────────
-// Usar FFmpeg del sistema (instalado via apt en el contenedor Docker)
-// Se usa child_process.spawn directamente para control total de argumentos
+// ─── Configuración FFmpeg / FFprobe ───────────────────────────────────────────
 const ffmpegPath = process.env.FFMPEG_PATH || '/usr/bin/ffmpeg'
+const ffprobePath = process.env.FFPROBE_PATH || '/usr/bin/ffprobe'
 console.log(`[Worker] FFmpeg path: ${ffmpegPath}`)
+console.log(`[Worker] FFprobe path: ${ffprobePath}`)
 
 // ─── Configuración B2 ─────────────────────────────────────────────────────────
 const s3 = new S3Client({
@@ -57,34 +61,37 @@ const HLS_BASE_URL = process.env.HLS_BASE_URL || process.env.B2_PUBLIC_URL
 // ─── Directorio temporal ──────────────────────────────────────────────────────
 const TEMP_DIR = process.env.TEMP_DIR || '/tmp/transcode'
 
-// ─── Perfiles de calidad HLS ──────────────────────────────────────────────────
+// ─── Catálogo completo de perfiles HLS ────────────────────────────────────────
 /**
  * Cada perfil define:
  *  - name: nombre del directorio y etiqueta
- *  - width/height: resolución objetivo
- *  - videoBitrate: bitrate de video en kbps
- *  - maxRate: bitrate máximo (para VBR)
- *  - bufSize: tamaño del buffer (2x videoBitrate)
- *  - audioBitrate: bitrate de audio en kbps
- *  - bandwidth: valor para el master.m3u8 (en bps)
+ *  - width/height: resolución máxima (se filtra dinámicamente)
+ *  - crf: Constant Rate Factor (menor = mejor calidad, mayor archivo)
+ *  - maxRate: bitrate máximo para VBR cap
+ *  - bufSize: tamaño del buffer (2x maxRate aprox)
+ *  - audioBitrate: bitrate de audio
+ *  - bandwidth: valor para el master.m3u8 (en bps, estimado)
+ *
+ * Ordenados de mayor a menor resolución.
+ * getProfilesForInput() filtra solo los que aplican.
  */
-const HLS_PROFILES = [
+const ALL_PROFILES = [
   {
     name: '1080p',
     width: 1920,
     height: 1080,
-    videoBitrate: '4000k',
-    maxRate: '4400k',
+    crf: 23,
+    maxRate: '4000k',
     bufSize: '8000k',
-    audioBitrate: '192k',
-    bandwidth: 4192000,
+    audioBitrate: '128k',
+    bandwidth: 4128000,
   },
   {
     name: '720p',
     width: 1280,
     height: 720,
-    videoBitrate: '2500k',
-    maxRate: '2750k',
+    crf: 23,
+    maxRate: '2500k',
     bufSize: '5000k',
     audioBitrate: '128k',
     bandwidth: 2628000,
@@ -93,13 +100,113 @@ const HLS_PROFILES = [
     name: '480p',
     width: 854,
     height: 480,
-    videoBitrate: '1000k',
-    maxRate: '1100k',
+    crf: 23,
+    maxRate: '1000k',
     bufSize: '2000k',
     audioBitrate: '96k',
     bandwidth: 1096000,
   },
+  {
+    name: '360p',
+    width: 640,
+    height: 360,
+    crf: 23,
+    maxRate: '600k',
+    bufSize: '1200k',
+    audioBitrate: '96k',
+    bandwidth: 696000,
+  },
+  {
+    name: '240p',
+    width: 426,
+    height: 240,
+    crf: 23,
+    maxRate: '400k',
+    bufSize: '800k',
+    audioBitrate: '64k',
+    bandwidth: 464000,
+  },
 ]
+
+// ─── Detección de resolución con ffprobe ──────────────────────────────────────
+
+/**
+ * Ejecuta ffprobe para obtener width y height del video de entrada.
+ *
+ * @param {string} inputPath - Ruta local del archivo de video
+ * @returns {Promise<{width: number, height: number}>}
+ */
+const probeResolution = (inputPath) => {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-show_entries', 'stream=width,height',
+      '-of', 'json',
+      inputPath,
+    ]
+
+    const proc = spawn(ffprobePath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout.on('data', (data) => { stdout += data.toString() })
+    proc.stderr.on('data', (data) => { stderr += data.toString() })
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        return reject(new Error(`ffprobe terminó con código ${code}: ${stderr}`))
+      }
+      try {
+        const info = JSON.parse(stdout)
+        const stream = info.streams?.[0]
+        if (!stream || !stream.width || !stream.height) {
+          return reject(new Error('ffprobe no devolvió resolución válida'))
+        }
+        resolve({ width: stream.width, height: stream.height })
+      } catch (e) {
+        reject(new Error(`Error parseando salida de ffprobe: ${e.message}`))
+      }
+    })
+
+    proc.on('error', (err) => {
+      reject(new Error(`No se pudo iniciar ffprobe: ${err.message}`))
+    })
+  })
+}
+
+// ─── Filtrado dinámico de perfiles ────────────────────────────────────────────
+
+/**
+ * Devuelve solo los perfiles cuya resolución sea MENOR o IGUAL
+ * a la resolución original del video. Usa el lado mayor (max(w,h))
+ * para soportar videos verticales y horizontales.
+ *
+ * Siempre devuelve al menos el perfil más bajo (240p).
+ *
+ * @param {number} inputWidth  - Ancho original del video
+ * @param {number} inputHeight - Alto original del video
+ * @returns {Array} Perfiles filtrados
+ */
+const getProfilesForInput = (inputWidth, inputHeight) => {
+  // Usar el lado mayor para comparar (soporta vertical y horizontal)
+  const inputMax = Math.max(inputWidth, inputHeight)
+  const inputMin = Math.min(inputWidth, inputHeight)
+
+  const filtered = ALL_PROFILES.filter((profile) => {
+    // Comparar el lado mayor del perfil con el lado mayor del input
+    const profileMax = Math.max(profile.width, profile.height)
+    return profileMax <= inputMax
+  })
+
+  // Siempre incluir al menos 240p como mínimo
+  if (filtered.length === 0) {
+    const lowest = ALL_PROFILES[ALL_PROFILES.length - 1] // 240p
+    return [lowest]
+  }
+
+  return filtered
+}
 
 // ─── Conexión MongoDB ─────────────────────────────────────────────────────────
 let mongoConnected = false
@@ -196,15 +303,17 @@ const deleteB2Prefix = async (prefix) => {
 
 /**
  * Transcodifica el video con FFmpeg a HLS multi-bitrate.
- * Usa child_process.spawn directamente para tener control total sobre los
- * argumentos de FFmpeg (fluent-ffmpeg deduplicaba las opciones -map repetidas).
+ * Usa CRF para mejor compresión, con maxrate cap.
+ * Filtra perfiles dinámicamente según resolución del input.
+ * Usa scale='min(W,iw)':-2 para evitar upscale.
  *
  * @param {string} inputPath  - Ruta del MP4 de entrada
  * @param {string} outputDir  - Directorio de salida para los segmentos HLS
+ * @param {Array}  profiles   - Perfiles filtrados para este video
  * @param {Function} onProgress - Callback de progreso (0-100)
  * @returns {Promise<number>} - Duración del video en segundos
  */
-const transcodeToHLS = (inputPath, outputDir, onProgress) => {
+const transcodeToHLS = (inputPath, outputDir, profiles, onProgress) => {
   return new Promise((resolve, reject) => {
     let duration = 0
 
@@ -216,22 +325,22 @@ const transcodeToHLS = (inputPath, outputDir, onProgress) => {
       '-i', inputPath,
     ]
 
-    // Agregar -map y opciones por cada perfil de calidad
-    HLS_PROFILES.forEach((profile, index) => {
+    // Agregar -map por cada perfil de calidad
+    profiles.forEach(() => {
       args.push(
         '-map', '0:v:0',           // Mapear primer stream de video
         '-map', '0:a:0',           // Mapear primer stream de audio
       )
     })
 
-    // Opciones de codec por perfil
-    HLS_PROFILES.forEach((profile, index) => {
+    // Opciones de codec por perfil (CRF + maxrate cap)
+    profiles.forEach((profile, index) => {
       args.push(
         `-c:v:${index}`, 'libx264',
-        `-b:v:${index}`, profile.videoBitrate,
+        `-crf:v:${index}`, `${profile.crf}`,
         `-maxrate:v:${index}`, profile.maxRate,
         `-bufsize:v:${index}`, profile.bufSize,
-        `-filter:v:${index}`, `scale=${profile.width}:-2`,
+        `-filter:v:${index}`, `scale='min(${profile.width},iw)':-2`,
         `-c:a:${index}`, 'aac',
         `-b:a:${index}`, profile.audioBitrate,
       )
@@ -239,15 +348,17 @@ const transcodeToHLS = (inputPath, outputDir, onProgress) => {
 
     // Opciones globales de optimización
     args.push(
-      '-preset', 'fast',
+      '-preset', 'medium',
+      '-profile:v', 'main',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
       '-g', '48',
       '-sc_threshold', '0',
       '-keyint_min', '48',
     )
 
     // Configuración HLS
-    // Usar name: para que %v se reemplace con 1080p, 720p, 480p (no 0, 1, 2)
-    const varStreamMap = HLS_PROFILES.map((p, i) => `v:${i},a:${i},name:${p.name}`).join(' ')
+    const varStreamMap = profiles.map((p, i) => `v:${i},a:${i},name:${p.name}`).join(' ')
 
     args.push(
       '-f', 'hls',
@@ -262,7 +373,8 @@ const transcodeToHLS = (inputPath, outputDir, onProgress) => {
     )
 
     console.log('[FFmpeg] Iniciando transcodificación')
-    console.log('[FFmpeg] Comando:', ffmpegPath, args.join(' ').substring(0, 300) + '...')
+    console.log(`[FFmpeg] Perfiles: ${profiles.map(p => p.name).join(', ')}`)
+    console.log('[FFmpeg] Comando:', ffmpegPath, args.join(' ').substring(0, 400) + '...')
 
     // ── Ejecutar FFmpeg con spawn ──────────────────────────────────────────
     const proc = spawn(ffmpegPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
@@ -336,8 +448,9 @@ const transcodeToHLS = (inputPath, outputDir, onProgress) => {
  *
  * @param {string} localDir  - Directorio local con los archivos HLS
  * @param {string} b2Prefix  - Prefijo en B2 (ej: hls/{videoId}/)
+ * @param {Array}  profiles  - Perfiles usados en esta transcodificación
  */
-const uploadHLSToB2 = async (localDir, b2Prefix) => {
+const uploadHLSToB2 = async (localDir, b2Prefix, profiles) => {
   const UPLOAD_CONCURRENCY = 5 // Subir 5 archivos simultáneamente
 
   // Recopilar todos los archivos a subir
@@ -351,7 +464,7 @@ const uploadHLSToB2 = async (localDir, b2Prefix) => {
   })
 
   // Archivos de cada perfil
-  for (const profile of HLS_PROFILES) {
+  for (const profile of profiles) {
     const profileDir = join(localDir, profile.name)
 
     try {
@@ -410,6 +523,9 @@ const processTranscodeJob = async (job) => {
   // Importar modelo Video (lazy import para evitar problemas de módulos)
   const { default: Video } = await import('../models/Video.js')
 
+  // Variable para los perfiles seleccionados (se define tras ffprobe)
+  let selectedProfiles = []
+
   try {
     // ── Paso 1: Conectar a MongoDB ──────────────────────────────────────────
     await connectMongo()
@@ -421,35 +537,45 @@ const processTranscodeJob = async (job) => {
     })
     await job.updateProgress(5)
 
-    // ── Paso 3: Crear directorios temporales ────────────────────────────────
+    // ── Paso 3: Crear directorio temporal base ──────────────────────────────
     await mkdir(jobDir, { recursive: true })
     await mkdir(outputDir, { recursive: true })
-
-    // Crear subdirectorios para cada perfil
-    for (const profile of HLS_PROFILES) {
-      await mkdir(join(outputDir, profile.name), { recursive: true })
-    }
 
     // ── Paso 4: Descargar MP4 desde B2 ──────────────────────────────────────
     console.log(`[Worker] Descargando MP4: ${rawKey}`)
     await downloadFromB2(rawKey, inputPath)
+    await job.updateProgress(15)
+
+    // ── Paso 5: Detectar resolución original con ffprobe ────────────────────
+    console.log('[Worker] Detectando resolución del video...')
+    const { width: inputWidth, height: inputHeight } = await probeResolution(inputPath)
+    console.log(`[Worker] Resolución detectada: ${inputWidth}x${inputHeight}`)
+
+    // ── Paso 6: Filtrar perfiles según resolución ───────────────────────────
+    selectedProfiles = getProfilesForInput(inputWidth, inputHeight)
+    console.log(`[Worker] Perfiles seleccionados: ${selectedProfiles.map(p => p.name).join(', ')}`)
     await job.updateProgress(20)
 
-    // ── Paso 5: Transcodificar con FFmpeg ────────────────────────────────────
+    // Crear subdirectorios para cada perfil seleccionado
+    for (const profile of selectedProfiles) {
+      await mkdir(join(outputDir, profile.name), { recursive: true })
+    }
+
+    // ── Paso 7: Transcodificar con FFmpeg ────────────────────────────────────
     console.log('[Worker] Iniciando transcodificación FFmpeg...')
-    const duration = await transcodeToHLS(inputPath, outputDir, async (percent) => {
+    const duration = await transcodeToHLS(inputPath, outputDir, selectedProfiles, async (percent) => {
       // Mapear progreso FFmpeg (0-95) al rango 20-80 del job total
       const jobProgress = 20 + Math.round(percent * 0.6)
       await job.updateProgress(jobProgress)
     })
     await job.updateProgress(80)
 
-    // ── Paso 6: Subir segmentos HLS a B2 ────────────────────────────────────
+    // ── Paso 8: Subir segmentos HLS a B2 ────────────────────────────────────
     console.log('[Worker] Subiendo segmentos HLS a B2...')
-    const filesUploaded = await uploadHLSToB2(outputDir, hlsBaseKey)
+    const filesUploaded = await uploadHLSToB2(outputDir, hlsBaseKey, selectedProfiles)
     await job.updateProgress(90)
 
-    // ── Paso 7: Eliminar MP4 original de B2 ─────────────────────────────────
+    // ── Paso 9: Eliminar MP4 original de B2 ─────────────────────────────────
     console.log(`[Worker] Eliminando MP4 original: ${rawKey}`)
     try {
       await deleteFromB2(rawKey)
@@ -458,9 +584,9 @@ const processTranscodeJob = async (job) => {
       console.warn('[Worker] No se pudo eliminar MP4 original:', deleteErr.message)
     }
 
-    // ── Paso 8: Actualizar MongoDB ───────────────────────────────────────────
+    // ── Paso 10: Actualizar MongoDB ──────────────────────────────────────────
     const hlsMasterUrl = `${HLS_BASE_URL}/${hlsBaseKey}master.m3u8`
-    const qualities = HLS_PROFILES.map((p) => p.name)
+    const qualities = selectedProfiles.map((p) => p.name)
 
     await Video.findByIdAndUpdate(videoId, {
       status: 'ready',
@@ -477,6 +603,8 @@ const processTranscodeJob = async (job) => {
     await job.updateProgress(100)
 
     console.log(`[Worker] ✅ Video ${videoId} listo: ${hlsMasterUrl}`)
+    console.log(`[Worker] Resolución original: ${inputWidth}x${inputHeight}`)
+    console.log(`[Worker] Perfiles generados: ${qualities.join(', ')}`)
     console.log(`[Worker] Archivos subidos: ${filesUploaded} | Duración: ${duration}s`)
 
     return {
