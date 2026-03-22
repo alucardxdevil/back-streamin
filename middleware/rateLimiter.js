@@ -80,14 +80,15 @@ const createLimiter = (options) => {
 /**
  * Rate limiter para el proxy de streaming de video.
  *
- * Límite: 120 solicitudes por IP cada 15 minutos.
+ * Límite: 600 solicitudes por IP cada 15 minutos.
  * Justificación: Un usuario legítimo viendo un video HLS genera ~1 solicitud
- * por fragmento (cada 6s), lo que equivale a ~150 req/15min para 1 video.
- * El límite de 120 permite reproducción normal pero bloquea scraping masivo.
+ * por fragmento (cada 6s) + playlists de calidad. Con múltiples perfiles
+ * y ABR, un video de 15min puede generar ~300-400 req.
+ * El límite de 600 permite reproducción normal pero bloquea scraping masivo.
  */
 export const streamRateLimiter = createLimiter({
   windowMs: parseInt(process.env.STREAM_RATE_WINDOW_MS) || 15 * 60 * 1000, // 15 min
-  max: parseInt(process.env.STREAM_RATE_MAX) || 120,
+  max: parseInt(process.env.STREAM_RATE_MAX) || 600,
 })
 
 /**

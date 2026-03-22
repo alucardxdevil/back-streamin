@@ -75,7 +75,7 @@ const VideoSchema = new mongoose.Schema({
     // Calidades disponibles generadas por FFmpeg
     qualities: {
         type: [String],
-        enum: ['1080p', '720p', '480p', '360p'],
+        enum: ['1080p', '720p', '480p', '360p', '240p'],
         default: []
     },
 

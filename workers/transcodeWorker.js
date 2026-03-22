@@ -340,7 +340,7 @@ const transcodeToHLS = (inputPath, outputDir, profiles, onProgress) => {
         `-crf:v:${index}`, `${profile.crf}`,
         `-maxrate:v:${index}`, profile.maxRate,
         `-bufsize:v:${index}`, profile.bufSize,
-        `-filter:v:${index}`, `scale='min(${profile.width},iw)':-2`,
+        `-filter:v:${index}`, `scale=min(${profile.width}\\,iw):-2`,
         `-c:a:${index}`, 'aac',
         `-b:a:${index}`, profile.audioBitrate,
       )
