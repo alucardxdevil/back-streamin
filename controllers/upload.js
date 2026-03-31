@@ -39,6 +39,7 @@ import {
   getAllowedMimeTypes,
 } from '../config/b2.js'
 import { createError } from '../err.js'
+import { convertToWebP, shouldConvertToWebP } from '../utils/convertToWebP.js'
 
 // Límites de tamaño por tipo de archivo
 const SIZE_LIMITS = {
@@ -147,14 +148,35 @@ export const uploadImage = async (req, res, next) => {
       return next(createError(400, 'Tipo de imagen no permitido'))
     }
 
-    const fileKey = generateFileKey(userId, originalname, mimetype)
+    // ── Conversión automática a WebP ──────────────────────────────────────
+    // Si la imagen es JPEG, PNG, GIF, BMP, TIFF o AVIF, se convierte a WebP.
+    // SVG y WebP se suben tal cual (SVG es vectorial, WebP ya está optimizado).
+    let finalBuffer = buffer
+    let finalMimeType = mimetype
+    let finalOriginalName = originalname
+
+    if (shouldConvertToWebP(mimetype)) {
+      try {
+        const converted = await convertToWebP(buffer, { quality: 80 })
+        finalBuffer = converted.buffer
+        finalMimeType = converted.contentType // 'image/webp'
+        // Cambiar extensión del nombre original para generar fileKey correcto
+        finalOriginalName = originalname.replace(/\.[^.]+$/, '.webp')
+        console.log(`[UploadImage] Convertido ${mimetype} → WebP (${size} → ${finalBuffer.length} bytes, ${Math.round((1 - finalBuffer.length / size) * 100)}% reducción)`)
+      } catch (conversionError) {
+        // Si la conversión falla, subir la imagen original sin convertir
+        console.warn('[UploadImage] Conversión WebP falló, subiendo original:', conversionError.message)
+      }
+    }
+
+    const fileKey = generateFileKey(userId, finalOriginalName, finalMimeType)
 
     await s3Client.send(
       new PutObjectCommand({
         Bucket: B2_CONFIG.bucket,
         Key: fileKey,
-        Body: buffer,
-        ContentType: mimetype,
+        Body: finalBuffer,
+        ContentType: finalMimeType,
       })
     )
 
@@ -162,7 +184,15 @@ export const uploadImage = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      data: { fileKey, publicUrl, fileType: 'image', contentType: mimetype, size },
+      data: {
+        fileKey,
+        publicUrl,
+        fileType: 'image',
+        contentType: finalMimeType,
+        size: finalBuffer.length,
+        originalSize: size,
+        converted: finalMimeType !== mimetype,
+      },
     })
   } catch (error) {
     console.error('[UploadImage] Error completo:', error)

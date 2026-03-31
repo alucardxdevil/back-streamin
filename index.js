@@ -9,6 +9,7 @@ import authRoute from './routes/auth.js'
 import uploadRoute from './routes/upload.js'
 import transcodeRoute from './routes/transcode.js'
 import streamRoute from './routes/stream.js'
+import sitemapRoute from './routes/sitemap.js'
 import cors from 'cors'
 import logger from './config/logger.js'
 
@@ -91,6 +92,10 @@ app.use('/api/transcode', transcodeRoute)
 // ── Sistema de Protección de Video (nuevas rutas) ─────────────────────────────
 // Todas las rutas de /api/stream están protegidas por múltiples capas de seguridad
 app.use('/api/stream', streamRoute)
+
+// ── SEO: Sitemap dinámico ─────────────────────────────────────────────────────
+// Accesible en /sitemap.xml (sin prefijo /api para que los crawlers lo encuentren)
+app.use('/', sitemapRoute)
 
 // ── Manejo de errores ─────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
