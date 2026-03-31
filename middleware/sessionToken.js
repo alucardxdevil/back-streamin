@@ -1,5 +1,5 @@
 /**
- * Sistema de Tokens de Sesión Anónimos — Stream-In
+ * Sistema de Tokens de Sesión Anónimos — stream-in
  *
  * Capa de protección: SESIÓN ANÓNIMA (Capa 3)
  * Amenaza cubierta: Solicitudes realizadas fuera del contexto de la aplicación.

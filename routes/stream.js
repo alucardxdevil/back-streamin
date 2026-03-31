@@ -1,5 +1,5 @@
 /**
- * Rutas del Sistema de Protección de Video — Stream-In
+ * Rutas del Sistema de Protección de Video — stream-in
  *
  * Todas las rutas de este módulo están protegidas por múltiples capas:
  *

@@ -1,5 +1,5 @@
 /**
- * Rate Limiting para Endpoints de Video — Stream-In
+ * Rate Limiting para Endpoints de Video — stream-in
  *
  * Capa de protección: LIMITACIÓN DE TASA (Capa 6)
  * Amenaza cubierta: Scraping automatizado, extracción masiva de contenido,

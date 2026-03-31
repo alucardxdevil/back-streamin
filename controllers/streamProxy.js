@@ -1,5 +1,5 @@
 /**
- * Proxy de Streaming de Video — Stream-In
+ * Proxy de Streaming de Video — stream-in
  *
  * Capa de protección: PROXY BACKEND (Capa 4)
  * Amenaza cubierta: Exposición directa de URLs de Backblaze B2.

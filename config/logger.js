@@ -1,5 +1,5 @@
 /**
- * Sistema de Logging Estructurado — Stream-In
+ * Sistema de Logging Estructurado — stream-in
  *
  * Capa de protección: MONITOREO Y AUDITORÍA (Capa 7)
  * Amenaza cubierta: Detección de abuso, scraping masivo, extracción sistemática.

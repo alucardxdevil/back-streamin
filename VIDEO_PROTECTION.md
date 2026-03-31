@@ -1,4 +1,4 @@
-# Sistema de Protección de Video — Stream-In
+# Sistema de Protección de Video — stream-in
 
 ## Resumen Ejecutivo
 

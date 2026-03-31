@@ -1,7 +1,7 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "description": "Stream-In API Server con HLS Streaming",
+  "description": "stream-in API Server con HLS Streaming",
   "main": "index.js",
   "type": "module",
   "scripts": {

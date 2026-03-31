@@ -1,4 +1,4 @@
-# Arquitectura HLS Streaming — Stream-In
+# Arquitectura HLS Streaming — stream-in
 
 ## Visión General
 

@@ -1,5 +1,5 @@
 /**
- * Middleware de Validación de Origen — Stream-In
+ * Middleware de Validación de Origen — stream-in
  *
  * Capa de protección: VALIDACIÓN DE ORIGEN (Capa 2)
  * Amenaza cubierta: Acceso directo desde navegadores externos, aplicaciones de
