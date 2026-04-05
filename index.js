@@ -10,6 +10,7 @@ import uploadRoute from './routes/upload.js'
 import transcodeRoute from './routes/transcode.js'
 import streamRoute from './routes/stream.js'
 import sitemapRoute from './routes/sitemap.js'
+import ogRoute from './routes/oembed.js'
 import cors from 'cors'
 import logger from './config/logger.js'
 
@@ -96,6 +97,12 @@ app.use('/api/stream', streamRoute)
 // ── SEO: Sitemap dinámico ─────────────────────────────────────────────────────
 // Accesible en /sitemap.xml (sin prefijo /api para que los crawlers lo encuentren)
 app.use('/', sitemapRoute)
+
+// ── SEO: Open Graph meta tags para crawlers ───────────────────────────────────
+// Genera HTML con meta tags OG/Twitter para que los crawlers de redes sociales
+// puedan leer las miniaturas, títulos y descripciones de videos y perfiles.
+// El Cloudflare Worker del frontend redirige crawlers aquí.
+app.use('/api/og', ogRoute)
 
 // ── Manejo de errores ─────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
