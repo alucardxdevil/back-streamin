@@ -72,6 +72,11 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Token', 'Range'],
   exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length'],
+  // Cachear respuestas preflight (OPTIONS) por 1 hora.
+  // CRÍTICO para Firefox: sin esto, Firefox envía un preflight para CADA request
+  // con header X-Session-Token (usado por hls.js en cada segmento .ts).
+  // Con maxAge, el navegador cachea la respuesta preflight y no la repite.
+  maxAge: 3600,
 }))
 
 // ── Middlewares globales ───────────────────────────────────────────────────────
@@ -91,6 +96,12 @@ app.use('/api/upload', uploadRoute)
 app.use('/api/transcode', transcodeRoute)
 
 // ── Sistema de Protección de Video (nuevas rutas) ─────────────────────────────
+// Handler explícito para OPTIONS preflight en rutas de streaming.
+// CRÍTICO para Firefox: hls.js envía el header X-Session-Token en cada request,
+// lo que fuerza un preflight CORS. Sin este handler, el preflight puede pasar
+// al router y ser rechazado por validateOrigin/requireSessionToken.
+app.options('/api/stream/*', cors())
+
 // Todas las rutas de /api/stream están protegidas por múltiples capas de seguridad
 app.use('/api/stream', streamRoute)
 

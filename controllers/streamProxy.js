@@ -100,10 +100,9 @@ const extractB2Key = (url) => {
  * @param {string} baseProxyUrl - URL base del proxy
  * @param {string} videoId - ID del video
  * @param {string} hlsBaseKey - Prefijo base en B2 (ej: "hls/videoId/")
- * @param {string} [sessionToken] - Token de sesión para incluir en URLs (evita preflight CORS en Firefox)
  * @returns {string}
  */
-const rewriteM3U8WithBase = (content, baseProxyUrl, videoId, hlsBaseKey, sessionToken) => {
+const rewriteM3U8WithBase = (content, baseProxyUrl, videoId, hlsBaseKey) => {
   const lines = content.split('\n')
   const baseKey = hlsBaseKey ? hlsBaseKey.replace(/\/$/, '') : null
 
@@ -127,11 +126,7 @@ const rewriteM3U8WithBase = (content, baseProxyUrl, videoId, hlsBaseKey, session
 
     if (key) {
       const vidParam = videoId ? `&vid=${videoId}` : ''
-      // Incluir _st (session token) como query param en las URLs de segmentos.
-      // Esto permite que hls.js en Firefox no necesite enviar el header X-Session-Token,
-      // evitando preflight CORS que causa "DOMException: fetch aborted" en Firefox.
-      const stParam = sessionToken ? `&_st=${encodeURIComponent(sessionToken)}` : ''
-      return `${baseProxyUrl}?key=${encodeURIComponent(key)}${vidParam}${stParam}`
+      return `${baseProxyUrl}?key=${encodeURIComponent(key)}${vidParam}`
     }
 
     return line
@@ -296,11 +291,7 @@ export const proxyVideoMaster = async (req, res, next) => {
       // Para archivos .m3u8: leer, reescribir URLs, y enviar
       const m3u8Content = await b2Response.text()
       const baseProxyUrl = `${req.protocol}://${req.get('host')}/api/stream/hls`
-      // Extraer el session token del request para incluirlo en las URLs de segmentos.
-      // Esto evita que hls.js necesite enviar headers custom (X-Session-Token),
-      // lo cual causa preflight CORS en Firefox y puede abortar la carga.
-      const sessionToken = req.headers['x-session-token'] || req.cookies?.stream_session || req.query?._st || null
-      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, video.hlsBaseKey, sessionToken)
+      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, video.hlsBaseKey)
 
       res.set({
         'Content-Type': 'application/vnd.apple.mpegurl',
@@ -412,9 +403,7 @@ export const proxyHLSSegment = async (req, res, next) => {
       // Reescribir el playlist de calidad
       const m3u8Content = await b2Response.text()
       const baseProxyUrl = `${req.protocol}://${req.get('host')}/api/stream/hls`
-      // Incluir session token en URLs de segmentos para evitar preflight CORS en Firefox
-      const sessionToken = req.headers['x-session-token'] || req.cookies?.stream_session || req.query?._st || null
-      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, getBaseKey(fileKey), sessionToken)
+      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, getBaseKey(fileKey))
 
       res.set({
         'Content-Type': 'application/vnd.apple.mpegurl',
