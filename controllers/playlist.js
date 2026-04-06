@@ -109,6 +109,31 @@ export const getPlaylist = async (req, res, next) => {
     }
 };
 
+/**
+ * Get a shared playlist by playlistId only (no userId required).
+ * Used for shared links where the viewer may not know the owner's userId.
+ * Returns the playlist with populated video data.
+ */
+export const getSharedPlaylist = async (req, res, next) => {
+    try {
+        const { playlistId } = req.params;
+        
+        const playlist = await Playlist.findById(playlistId)
+            .populate({
+                path: "videos.videoId",
+                select: "title description imgUrl videoUrl duration tags"
+            });
+        
+        if (!playlist) {
+            return next(createError(404, "Playlist no encontrada"));
+        }
+        
+        res.status(200).json(playlist);
+    } catch (err) {
+        next(err);
+    }
+};
+
 export const updatePlaylist = async (req, res, next) => {
     try {
         const { userId, playlistId } = req.params;
