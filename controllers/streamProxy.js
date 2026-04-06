@@ -102,7 +102,7 @@ const extractB2Key = (url) => {
  * @param {string} hlsBaseKey - Prefijo base en B2 (ej: "hls/videoId/")
  * @returns {string}
  */
-const rewriteM3U8WithBase = (content, baseProxyUrl, videoId, hlsBaseKey) => {
+const rewriteM3U8WithBase = (content, baseProxyUrl, videoId, hlsBaseKey, sessionToken) => {
   const lines = content.split('\n')
   const baseKey = hlsBaseKey ? hlsBaseKey.replace(/\/$/, '') : null
 
@@ -114,19 +114,23 @@ const rewriteM3U8WithBase = (content, baseProxyUrl, videoId, hlsBaseKey) => {
     let key = null
 
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      // URL absoluta de B2
       key = extractB2Key(trimmed)
     } else if (baseKey && !trimmed.startsWith('/')) {
-      // Ruta relativa: construir key completo
       key = `${baseKey}/${trimmed}`
     } else if (trimmed.startsWith('/')) {
-      // Ruta absoluta relativa al bucket
       key = trimmed.replace(/^\//, '')
     }
 
     if (key) {
       const vidParam = videoId ? `&vid=${videoId}` : ''
-      return `${baseProxyUrl}?key=${encodeURIComponent(key)}${vidParam}`
+      // Para segmentos .ts: incluir _st como query param.
+      // Esto evita que hls.js envíe el header X-Session-Token,
+      // que fuerza un preflight CORS en Firefox para cada segmento.
+      // Los preflights abortados son la causa de que los segmentos
+      // lleguen con 0 bytes y el video no pueda reproducirse desde el inicio.
+      const isSegment = key.endsWith('.ts')
+      const stParam = (isSegment && sessionToken) ? `&_st=${sessionToken}` : ''
+      return `${baseProxyUrl}?key=${encodeURIComponent(key)}${vidParam}${stParam}`
     }
 
     return line
@@ -291,7 +295,8 @@ export const proxyVideoMaster = async (req, res, next) => {
       // Para archivos .m3u8: leer, reescribir URLs, y enviar
       const m3u8Content = await b2Response.text()
       const baseProxyUrl = `${req.protocol}://${req.get('host')}/api/stream/hls`
-      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, video.hlsBaseKey)
+      const sessionToken = req.headers['x-session-token'] || req.query?._st || null
+      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, video.hlsBaseKey, sessionToken)
 
       res.set({
         'Content-Type': 'application/vnd.apple.mpegurl',
@@ -403,7 +408,8 @@ export const proxyHLSSegment = async (req, res, next) => {
       // Reescribir el playlist de calidad
       const m3u8Content = await b2Response.text()
       const baseProxyUrl = `${req.protocol}://${req.get('host')}/api/stream/hls`
-      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, getBaseKey(fileKey))
+      const sessionToken = req.headers['x-session-token'] || req.query?._st || null
+      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, getBaseKey(fileKey), sessionToken)
 
       res.set({
         'Content-Type': 'application/vnd.apple.mpegurl',
