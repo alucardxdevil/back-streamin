@@ -355,6 +355,15 @@ const transcodeToHLS = (inputPath, outputDir, profiles, onProgress) => {
       '-g', '48',
       '-sc_threshold', '0',
       '-keyint_min', '48',
+      // Normalizar timestamps de salida a partir de 0.
+      // Sin esto, si el MP4 fuente tiene un PTS offset (muy común en archivos
+      // con edit lists o cuando el primer keyframe no está en t=0), FFmpeg
+      // propaga ese offset a los segmentos .ts. Chrome/MSE lo compensa
+      // internamente, pero Firefox/MSE NO: interpreta el PTS offset como
+      // tiempo real, lo que hace que hls.js intente hacer seek al inicio del
+      // PTS en vez de t=0, causando que el video salte varios segundos adelante
+      // o no inicie hasta que el buffer alcance el PTS del primer frame.
+      '-output_ts_offset', '0',
     )
 
     // Configuración HLS
@@ -364,8 +373,13 @@ const transcodeToHLS = (inputPath, outputDir, profiles, onProgress) => {
       '-f', 'hls',
       '-hls_time', '6',
       '-hls_playlist_type', 'vod',
-      '-hls_flags', 'independent_segments',
+      // independent_segments: cada segmento puede decodificarse por sí solo.
+      // split_by_time: fuerza que los cortes sean por tiempo (no por keyframe),
+      //   generando segmentos más uniformes. Esto evita que el primer segmento
+      //   tenga una duración variable que confunda a hls.js en Firefox.
+      '-hls_flags', 'independent_segments+split_by_time',
       '-hls_segment_type', 'mpegts',
+      '-start_number', '0',
       '-hls_segment_filename', `${outputDir}/%v/seg%03d.ts`,
       '-master_pl_name', 'master.m3u8',
       '-var_stream_map', varStreamMap,
