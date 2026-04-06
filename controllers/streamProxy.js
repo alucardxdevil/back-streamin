@@ -123,13 +123,13 @@ const rewriteM3U8WithBase = (content, baseProxyUrl, videoId, hlsBaseKey, session
 
     if (key) {
       const vidParam = videoId ? `&vid=${videoId}` : ''
-      // Para segmentos .ts: incluir _st como query param.
+      // Incluir _st como query param en TODOS los recursos (.ts y .m3u8).
       // Esto evita que hls.js envíe el header X-Session-Token,
-      // que fuerza un preflight CORS en Firefox para cada segmento.
-      // Los preflights abortados son la causa de que los segmentos
-      // lleguen con 0 bytes y el video no pueda reproducirse desde el inicio.
-      const isSegment = key.endsWith('.ts')
-      const stParam = (isSegment && sessionToken) ? `&_st=${sessionToken}` : ''
+      // que fuerza un preflight CORS en Firefox para cada petición.
+      // Sin el _st en los playlists de calidad (.m3u8), Firefox requiere
+      // preflight para cada playlist, retrasando la resolución de calidad
+      // y causando que la reproducción no inicie desde el segundo 0.
+      const stParam = sessionToken ? `&_st=${sessionToken}` : ''
       return `${baseProxyUrl}?key=${encodeURIComponent(key)}${vidParam}${stParam}`
     }
 
