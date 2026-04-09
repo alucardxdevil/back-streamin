@@ -196,9 +196,13 @@ export const forgotPassword = async (req, res, next) => {
         })
 
         if (!resendResponse.ok) {
-            const resendError = await resendResponse.text()
+            const contentType = resendResponse.headers.get('content-type') || ''
+            const resendError = contentType.includes('application/json')
+                ? await resendResponse.json().catch(() => null)
+                : await resendResponse.text().catch(() => '')
             return res.status(502).json({
                 message: 'Could not send password recovery email.',
+                status: resendResponse.status,
                 details: resendError
             })
         }
