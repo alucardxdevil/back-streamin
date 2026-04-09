@@ -59,6 +59,14 @@ const UserSchema = new mongoose.Schema({
         instagram: { type: String, default: "" },
         facebook: { type: String, default: "" },
         website: { type: String, default: "" }
+    },
+    passwordResetTokenHash: {
+        type: String,
+        select: false,
+    },
+    passwordResetExpires: {
+        type: Date,
+        select: false,
     }
 },
 {

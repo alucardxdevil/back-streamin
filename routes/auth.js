@@ -1,5 +1,5 @@
 import express from 'express';
-import { googleAuth, logoutHandler, signin, signup } from "../controllers/auth.js";
+import { forgotPassword, googleAuth, logoutHandler, resetPasswordWithToken, signin, signup } from "../controllers/auth.js";
 
 const router = express.Router()
 
@@ -14,5 +14,11 @@ router.post('/google', googleAuth)
 
 // logout
 router.post('/logout', logoutHandler)
+
+// forgot password
+router.post('/forgot-password', forgotPassword)
+
+// reset password (token from email)
+router.post('/reset-password', resetPasswordWithToken)
 
 export default router

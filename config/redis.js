@@ -6,9 +6,7 @@
  */
 
 import IORedis from 'ioredis'
-import dotenv from 'dotenv'
-
-dotenv.config()
+import './loadEnv.js'
 
 const redisConfig = {
   host: process.env.REDIS_HOST || '127.0.0.1',

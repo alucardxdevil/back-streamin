@@ -31,11 +31,9 @@ import { createReadStream, createWriteStream } from 'fs'
 import { mkdir, rm, readdir, stat } from 'fs/promises'
 import { join, extname } from 'path'
 import { pipeline } from 'stream/promises'
-import dotenv from 'dotenv'
+import '../config/loadEnv.js'
 import { createRedisConnection } from '../config/redis.js'
 import { QUEUE_NAME } from '../queues/transcodeQueue.js'
-
-dotenv.config({ path: new URL('../../.env', import.meta.url).pathname })
 
 // ─── Configuración FFmpeg / FFprobe ───────────────────────────────────────────
 const ffmpegPath = process.env.FFMPEG_PATH || '/usr/bin/ffmpeg'

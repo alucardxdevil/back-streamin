@@ -16,13 +16,11 @@
  *  3. Archivos raw/* en B2 de videos con status 'error' y más de ERROR_RETENTION_DAYS días
  */
 
+import '../config/loadEnv.js'
 import { rm, readdir, stat } from 'fs/promises'
 import { join } from 'path'
 import mongoose from 'mongoose'
 import { S3Client, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
-import dotenv from 'dotenv'
-
-dotenv.config({ path: new URL('../../.env', import.meta.url).pathname })
 
 // ─── Configuración ────────────────────────────────────────────────────────────
 const TEMP_DIR = process.env.TEMP_DIR || '/tmp/transcode'

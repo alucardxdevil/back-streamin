@@ -4,9 +4,7 @@
 
 import { S3Client } from '@aws-sdk/client-s3'
 import { v4 as uuidv4 } from 'uuid'
-import dotenv from 'dotenv'
-
-dotenv.config()
+import './loadEnv.js'
 
 // Validar variables de entorno requeridas
 const requiredEnvVars = [

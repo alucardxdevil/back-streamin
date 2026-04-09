@@ -1,6 +1,6 @@
+import './config/loadEnv.js'
 import express from 'express'
 import mongoose from 'mongoose'
-import dotenv from 'dotenv'
 import cookieParser from 'cookie-parser'
 import userRoute from './routes/users.js'
 import videoRoute from './routes/videos.js'
@@ -15,7 +15,6 @@ import cors from 'cors'
 import logger from './config/logger.js'
 
 const app = express()
-dotenv.config()
 
 mongoose.set('strictQuery', false)
 const connect = () => {
@@ -42,8 +41,10 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
 if (!isProduction) {
   allowedOrigins.push(
     'http://localhost:3000',
+    'http://localhost:3001',
     'http://localhost:5000',
     'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
     'http://127.0.0.1:5000'
   )
 }

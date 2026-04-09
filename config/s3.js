@@ -1,7 +1,5 @@
 import { S3Client } from '@aws-sdk/client-s3'
-import dotenv from 'dotenv'
-
-dotenv.config()
+import './loadEnv.js'
 
 const s3 = new S3Client({
   endpoint: process.env.B2_ENDPOINT,

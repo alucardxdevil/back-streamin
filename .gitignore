@@ -2,6 +2,7 @@ node_modules
 dist
 build
 .env
+.env.local
 logs/
 *.log
 .env.example
@@ -10,3 +11,7 @@ Dockerfile
 docker-compose.yml
 Dockerfile.worker
 docker-compose.example.yml
+env.local.example
+ARCHITECTURE_HLS.md
+B2_INTEGRATION.md
+VIDEO_PROTECTION.md
