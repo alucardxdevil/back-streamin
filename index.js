@@ -37,6 +37,17 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .map(o => o.trim())
   .filter(Boolean)
 
+// Producción: dominios del frontend (evita CORS si ALLOWED_ORIGINS no se configuró en el servidor)
+if (isProduction) {
+  const defaultProdOrigins = [
+    'https://stream-in.com',
+    'https://www.stream-in.com',
+  ]
+  for (const o of defaultProdOrigins) {
+    if (!allowedOrigins.includes(o)) allowedOrigins.push(o)
+  }
+}
+
 // En desarrollo, agregar localhost por defecto
 if (!isProduction) {
   allowedOrigins.push(
