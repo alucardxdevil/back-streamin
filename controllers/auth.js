@@ -7,6 +7,7 @@ import { verifyToken } from "../verifyToken.js"
 import cookieParser from "cookie-parser"
 import fetch from "node-fetch"
 import crypto from "crypto"
+import logger from "../config/logger.js"
 
 const JWT = process.env.JWT || 'token.01010101'
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
@@ -181,7 +182,9 @@ export const forgotPassword = async (req, res, next) => {
           </div>
         `
 
-        const resendResponse = await fetch('https://api.resend.com/emails', {
+        let resendResponse
+        try {
+            resendResponse = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${RESEND_API_KEY}`,
@@ -193,13 +196,29 @@ export const forgotPassword = async (req, res, next) => {
                 subject,
                 html
             })
-        })
+            })
+        } catch (fetchErr) {
+            logger.error('Resend fetch failed', {
+                email,
+                message: fetchErr?.message,
+            })
+            return res.status(502).json({
+                message: 'Could not send password recovery email.',
+                details: 'Resend request failed (network or DNS).'
+            })
+        }
 
         if (!resendResponse.ok) {
             const contentType = resendResponse.headers.get('content-type') || ''
             const resendError = contentType.includes('application/json')
                 ? await resendResponse.json().catch(() => null)
                 : await resendResponse.text().catch(() => '')
+
+            logger.error('Resend email send failed', {
+                email,
+                status: resendResponse.status,
+                error: resendError,
+            })
             return res.status(502).json({
                 message: 'Could not send password recovery email.',
                 status: resendResponse.status,
