@@ -60,7 +60,7 @@ if (!isProduction) {
   )
 }
 
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
     // 1. Permitir peticiones sin origin (como apps móviles o herramientas de postman)
     if (!origin) return callback(null, true);
@@ -75,9 +75,7 @@ app.use(cors({
       return callback(null, true);
     } else {
       logger.warn('CORS bloqueado', { origin });
-      const corsError = new Error('No permitido por CORS');
-      corsError.status = 403;
-      return callback(corsError);
+      return callback(null, false);
     }
   },
   credentials: true, // VITAL: Mantiene la conexión de cookies abierta
@@ -89,7 +87,11 @@ app.use(cors({
   // con header X-Session-Token (usado por hls.js en cada segmento .ts).
   // Con maxAge, el navegador cachea la respuesta preflight y no la repite.
   maxAge: 3600,
-}))
+}
+
+// IMPORTANTE: manejar preflight explícitamente en todas las rutas
+app.options('*', cors(corsOptions))
+app.use(cors(corsOptions))
 
 // ── Middlewares globales ───────────────────────────────────────────────────────
 app.use(cookieParser())
