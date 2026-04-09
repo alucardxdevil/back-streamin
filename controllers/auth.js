@@ -137,8 +137,9 @@ export const forgotPassword = async (req, res, next) => {
     try {
         const user = await User.findOne({ email })
 
-        // Always return success if the user does not exist to avoid user enumeration.
-        if (!user) {
+        // Always return success if the user does not exist or is a Google-only account
+        // to avoid user enumeration and to prevent sending reset links for Google users.
+        if (!user || user.fromGoogle) {
             return res.status(200).json({
                 message: 'If the account exists, a password recovery email has been sent.'
             })
