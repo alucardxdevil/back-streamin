@@ -166,18 +166,18 @@ export const forgotPassword = async (req, res, next) => {
         )
 
         const resetUrl = `${FRONTEND_URL}/reset-password?token=${encodeURIComponent(rawToken)}`
-        const subject = 'Recupera tu contrasena - Stream In'
+        const subject = 'Password Recovery - stream-in'
         const html = `
           <div style="font-family: Arial, sans-serif; color: #111;">
-            <h2 style="margin-bottom: 8px;">Recuperacion de contrasena</h2>
-            <p>Hola ${user.name || ''},</p>
-            <p>Recibimos una solicitud para recuperar tu contrasena en Stream In.</p>
+            <h2 style="margin-bottom: 8px;">Password Recovery</h2>
+            <p>Hello ${user.name || ''},</p>
+            <p>We received a request to recover your password at stream-in.</p>
             <p>
-              Haz clic en el siguiente enlace para continuar:
+              Click on the following link to continue:
               <br />
               <a href="${resetUrl}" target="_blank" rel="noopener noreferrer">${resetUrl}</a>
             </p>
-            <p>Si no solicitaste este cambio, puedes ignorar este correo.</p>
+            <p>If you did not request this change, you can ignore this email.</p>
           </div>
         `
 
