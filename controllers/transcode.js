@@ -104,13 +104,17 @@ export const enqueueTranscode = async (req, res, next) => {
     const userId = req.user?.id || req.user?._id
     if (!userId) return next(createError(401, 'Token inválido'))
 
-    const { rawKey, title, description, tags, imgUrl, imgKey, fileSize } = req.body
+    const { rawKey, title, description, classification = 'A', tags, imgUrl, imgKey, fileSize } = req.body
 
     // Validaciones
     if (!rawKey) return next(createError(400, 'rawKey es requerido'))
     if (!title) return next(createError(400, 'title es requerido'))
     if (!description) return next(createError(400, 'description es requerido'))
     if (!imgUrl) return next(createError(400, 'imgUrl es requerido'))
+    const normalizedClassification = String(classification).toUpperCase()
+    if (!['A', 'B', 'C', 'D'].includes(normalizedClassification)) {
+      return next(createError(400, 'classification debe ser A, B, C o D'))
+    }
 
     // Verificar que el rawKey pertenezca al usuario
     if (!rawKey.includes(String(userId))) {
@@ -122,6 +126,7 @@ export const enqueueTranscode = async (req, res, next) => {
       userId,
       title,
       description,
+      classification: normalizedClassification,
       tags: tags || [],
       imgUrl,
       imgKey: imgKey || null,

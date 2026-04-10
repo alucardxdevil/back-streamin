@@ -16,6 +16,11 @@ const VideoSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    classification: {
+        type: String,
+        enum: ['A', 'B', 'C', 'D'],
+        default: 'A'
+    },
     tags: {
         type: [String],
         default: []
