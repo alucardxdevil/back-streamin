@@ -65,6 +65,11 @@ export const signin = async (req, res, next) => {
         const user = await User.findOne({email: req.body.email})
         if(!user) return next(createError(404, 'User or password incorrect!'))
 
+        // Verificar si la cuenta ha sido eliminada
+        if (user.isDeleted) {
+            return next(createError(403, 'This account has been deleted'))
+        }
+
         const isCorrect = await bcrypt.compare(req.body.password, user.password)
         if(!isCorrect) return next(createError(404, 'User or password incorrect!'))
 
@@ -91,6 +96,11 @@ export const googleAuth = async (req, res, next) => {
     try {
         const user = await User.findOne({email: req.body.email})
         if(user) {
+            // Verificar si la cuenta ha sido eliminada
+            if (user.isDeleted) {
+                return next(createError(403, 'This account has been deleted'))
+            }
+            
             const token = jwt.sign({id: user._id}, JWT)
 
             res.cookie('access_token', token, {

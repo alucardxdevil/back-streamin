@@ -5,6 +5,12 @@ import User from "../models/User.js"
 export const addVideo = async (req, res, next) => {
     const newVideo = new Video({userId: req.user.id, ...req.body})
     try {
+        // Verificar que el usuario no ha sido eliminado
+        const user = await User.findById(req.user.id).select('isDeleted').lean()
+        if (!user || user.isDeleted) {
+            return next(createError(403, 'Cannot create video: account deleted or not found'))
+        }
+        
         const savedVideo = await newVideo.save()
         res.status(200).json(savedVideo)
     } catch (err) {
