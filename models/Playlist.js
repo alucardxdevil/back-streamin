@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 
+const PLAYLIST_NAME_MAX = 100;
+const PLAYLIST_DESC_MAX = 500;
+
 const PlaylistSchema = new mongoose.Schema({
     userId: {
         type: String,
@@ -8,9 +11,19 @@ const PlaylistSchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
+        maxlength: [PLAYLIST_NAME_MAX, `El nombre no puede exceder ${PLAYLIST_NAME_MAX} caracteres`],
+        trim: true,
+        validate: {
+            validator: function(v) {
+                return v && v.trim().length > 0;
+            },
+            message: 'El nombre no puede estar vacío'
+        }
     },
     description: {
         type: String,
+        maxlength: [PLAYLIST_DESC_MAX, `La descripción no puede exceder ${PLAYLIST_DESC_MAX} caracteres`],
+        default: ''
     },
     videos: [{
         videoId: {
@@ -21,6 +34,7 @@ const PlaylistSchema = new mongoose.Schema({
         videoTitle: {
             type: String,
             required: true,
+            maxlength: 200
         },
         videoDuration: {
             type: String,

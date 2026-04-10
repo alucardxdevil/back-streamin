@@ -1,5 +1,10 @@
 import mongoose from "mongoose";
 
+const VIDEO_TITLE_MAX = 200;
+const VIDEO_DESC_MAX = 5000;
+const TAG_MAX_LENGTH = 50;
+const MAX_TAGS = 20;
+
 const VideoSchema = new mongoose.Schema({
     // ─── Identificación ───────────────────────────────────────────────────────
     userId: {
@@ -11,10 +16,21 @@ const VideoSchema = new mongoose.Schema({
     title: {
         type: String,
         required: true,
+        maxlength: [VIDEO_TITLE_MAX, `El título no puede exceder ${VIDEO_TITLE_MAX} caracteres`],
+        trim: true,
+        validate: {
+            validator: function(v) {
+                // No permitir solo espacios o caracteres especiales
+                return v && v.trim().length > 0 && /[a-zA-Z0-9]/.test(v);
+            },
+            message: 'El título debe contener al menos un carácter alfanumérico'
+        }
     },
     description: {
         type: String,
         required: true,
+        maxlength: [VIDEO_DESC_MAX, `La descripción no puede exceder ${VIDEO_DESC_MAX} caracteres`],
+        trim: true
     },
     classification: {
         type: String,
@@ -23,7 +39,13 @@ const VideoSchema = new mongoose.Schema({
     },
     tags: {
         type: [String],
-        default: []
+        default: [],
+        validate: {
+            validator: function(v) {
+                return v.length <= MAX_TAGS;
+            },
+            message: `No puede tener más de ${MAX_TAGS} tags`
+        }
     },
     // Duración en segundos (extraída por FFmpeg durante transcodificación)
     duration: {

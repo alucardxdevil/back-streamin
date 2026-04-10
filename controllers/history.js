@@ -44,6 +44,12 @@ export const addVideoToHistory = async (req, res, next) => {
 export const getHistory = async (req, res, next) => {
     try {
         const { userId } = req.params;
+        
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para ver este historial"));
+        }
+        
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
@@ -79,6 +85,11 @@ export const deleteHistory = async (req, res, next) => {
     try {
         const { userId, historyId } = req.params;
         
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para eliminar este historial"));
+        }
+        
         await History.findOneAndDelete({
             _id: historyId,
             userId
@@ -93,6 +104,11 @@ export const deleteHistory = async (req, res, next) => {
 export const clearHistory = async (req, res, next) => {
     try {
         const { userId } = req.params;
+        
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para eliminar este historial"));
+        }
         
         await History.deleteMany({ userId });
         

@@ -21,6 +21,7 @@ import {
   uploadVideo,
   deleteFile,
 } from '../controllers/upload.js'
+import { validateImage, validateVideo, validatePresignedBody } from '../middleware/fileValidator.js'
 
 const router = express.Router()
 
@@ -36,23 +37,26 @@ const upload = multer({
  * POST /api/upload/image
  * Sube imagen a B2 a través del servidor (proxy).
  * Body: multipart/form-data con campo "file"
+ * Validación: MIME type, extensión, magic numbers, tamaño
  */
-router.post('/image', verifyToken, upload.single('file'), uploadImage)
+router.post('/image', verifyToken, upload.single('file'), validateImage, uploadImage)
 
 /**
  * POST /api/upload/video
  * Sube video a B2 a través del servidor (proxy).
  * Body: multipart/form-data con campo "file"
+ * Validación: MIME type, extensión, magic numbers, tamaño
  */
-router.post('/video', verifyToken, upload.single('file'), uploadVideo)
+router.post('/video', verifyToken, upload.single('file'), validateVideo, uploadVideo)
 
 /**
  * POST /api/upload/generate-presigned-post
  * Genera presigned POST para subida directa cliente→B2.
  * Requiere CORS configurado en B2 (node server/scripts/setup-b2-cors.js)
  * Body: { fileName, contentType, fileSize }
+ * Validación: extensión, contentType
  */
-router.post('/generate-presigned-post', verifyToken, generatePresignedPost)
+router.post('/generate-presigned-post', verifyToken, validatePresignedBody, generatePresignedPost)
 
 /**
  * DELETE /api/upload/file

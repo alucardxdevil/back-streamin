@@ -2,6 +2,7 @@ import './config/loadEnv.js'
 import express from 'express'
 import mongoose from 'mongoose'
 import cookieParser from 'cookie-parser'
+import helmet from 'helmet'
 import userRoute from './routes/users.js'
 import videoRoute from './routes/videos.js'
 import commentRoute from './routes/comments.js'
@@ -27,6 +28,31 @@ const connect = () => {
         throw err
     })
 }
+
+// ── Configuración de Helmet (Security Headers) ───────────────────────────────────
+// Helmet establece headers de seguridad HTTP para proteger contra ataques comunes
+const helmetConfig = {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      mediaSrc: ["'self'", "https:", "blob:"],
+      frameSrc: ["'self'", "https://www.youtube.com", "https://player.vimeo.com"],
+      connectSrc: ["'self'", "https:", "wss:"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Desactivado para permitir embedding de contenido
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}
+
+app.use(helmet(helmetConfig))
 
 // ── Configuración de CORS ──────────────────────────────────────────────────────
 // Permite solicitudes desde los dominios autorizados de la aplicación
@@ -95,7 +121,8 @@ app.use(cors(corsOptions))
 
 // ── Middlewares globales ───────────────────────────────────────────────────────
 app.use(cookieParser())
-app.use(express.json())
+app.use(express.json({ limit: '100kb' })) // Limitar tamaño del body para prevenir DoS
+app.use(express.urlencoded({ extended: true, limit: '100kb' }))
 
 // Confiar en el primer proxy (para obtener IP real con X-Forwarded-For)
 // Necesario para rate limiting correcto detrás de Nginx/Cloudflare

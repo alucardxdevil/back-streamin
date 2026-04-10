@@ -19,12 +19,33 @@ function hashPasswordResetToken(rawToken) {
     return crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex')
 }
 
+const validatePassword = (password) => {
+    if (!password || password.length < 8) {
+        return { valid: false, message: 'La contraseña debe tener al menos 8 caracteres' };
+    }
+    if (!/[A-Z]/.test(password)) {
+        return { valid: false, message: 'La contraseña debe tener al menos una mayúscula' };
+    }
+    if (!/[a-z]/.test(password)) {
+        return { valid: false, message: 'La contraseña debe tener al menos una minúscula' };
+    }
+    if (!/[0-9]/.test(password)) {
+        return { valid: false, message: 'La contraseña debe tener al menos un número' };
+    }
+    return { valid: true };
+};
+
 export const signup = async (req, res, next) => {
 
     const {password, ...rest} = req.body
 
     if (!password) {
         return res.status(400).send('Password is required')
+    }
+
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+        return res.status(400).json({ message: passwordValidation.message });
     }
 
     try {
@@ -244,8 +265,10 @@ export const resetPasswordWithToken = async (req, res, next) => {
     if (!password || typeof password !== 'string') {
         return res.status(400).json({ message: 'Password is required.' })
     }
-    if (password.length < 6) {
-        return res.status(400).json({ message: 'Password must be at least 6 characters.' })
+    
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+        return res.status(400).json({ message: passwordValidation.message });
     }
 
     try {

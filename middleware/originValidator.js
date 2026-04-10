@@ -43,8 +43,6 @@ const getAllowedOrigins = () => {
 }
 
 /**
- * Extrae el origen base de una URL completa.
- * Ejemplo: "https://example.com/path?q=1" → "https://example.com"
  *
  * @param {string} url
  * @returns {string|null}

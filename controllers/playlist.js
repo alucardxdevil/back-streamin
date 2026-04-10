@@ -7,6 +7,11 @@ export const createPlaylist = async (req, res, next) => {
     try {
         const { userId, name, description, videoIds } = req.body;
         
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para crear playlists para otro usuario"));
+        }
+        
         // Si videoIds es un array, usarlo; si es un solo videoId, convertirlo a array
         const videoIdList = videoIds ? (Array.isArray(videoIds) ? videoIds : [videoIds]) : [];
         
@@ -53,6 +58,12 @@ export const createPlaylist = async (req, res, next) => {
 export const getPlaylists = async (req, res, next) => {
     try {
         const { userId } = req.params;
+        
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para ver estas playlists"));
+        }
+        
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
@@ -87,6 +98,11 @@ export const getPlaylists = async (req, res, next) => {
 export const getPlaylist = async (req, res, next) => {
     try {
         const { userId, playlistId } = req.params;
+        
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para ver esta playlist"));
+        }
         
         const playlist = await Playlist.findOne({
             _id: playlistId,
@@ -139,6 +155,11 @@ export const updatePlaylist = async (req, res, next) => {
         const { userId, playlistId } = req.params;
         const { name, description } = req.body;
         
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para modificar esta playlist"));
+        }
+        
         const playlist = await Playlist.findOneAndUpdate({
             _id: playlistId,
             userId
@@ -162,6 +183,11 @@ export const deletePlaylist = async (req, res, next) => {
     try {
         const { userId, playlistId } = req.params;
         
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para eliminar esta playlist"));
+        }
+        
         await Playlist.findOneAndDelete({
             _id: playlistId,
             userId
@@ -176,6 +202,11 @@ export const deletePlaylist = async (req, res, next) => {
 export const addVideoToPlaylist = async (req, res, next) => {
     try {
         const { userId, playlistId, videoId } = req.params;
+        
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para modificar esta playlist"));
+        }
         
         // Verificar que el video existe
         const video = await Video.findById(videoId);
@@ -221,6 +252,21 @@ export const removeVideoFromPlaylist = async (req, res, next) => {
     try {
         const { userId, playlistId, videoId } = req.params;
         
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para modificar esta playlist"));
+        }
+        
+        // Verificar que la playlist pertenece al usuario
+        const playlist = await Playlist.findOne({
+            _id: playlistId,
+            userId
+        });
+        
+        if (!playlist) {
+            return next(createError(404, "Playlist no encontrada"));
+        }
+        
         await Playlist.findByIdAndUpdate(playlistId, {
             $pull: {
                 videos: {
@@ -243,6 +289,11 @@ export const removeVideoFromPlaylist = async (req, res, next) => {
 export const removePlaylistItem = async (req, res, next) => {
     try {
         const { userId, playlistId, itemId } = req.params;
+
+        // Verificación de seguridad: el usuario autenticado debe ser el mismo
+        if (req.user?.id && req.user.id !== userId) {
+            return next(createError(403, "No tienes permiso para modificar esta playlist"));
+        }
 
         const updated = await Playlist.findOneAndUpdate(
             { _id: playlistId, userId },
