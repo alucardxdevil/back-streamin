@@ -28,7 +28,7 @@ const router = express.Router()
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 500 * 1024 * 1024, // 500 MB máximo
+    fileSize: 800 * 1024 * 1024, // 800 MB máximo (vídeo vía proxy)
   },
 })
 

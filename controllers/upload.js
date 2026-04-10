@@ -44,7 +44,7 @@ import { convertToWebP, shouldConvertToWebP } from '../utils/convertToWebP.js'
 // Límites de tamaño por tipo de archivo
 const SIZE_LIMITS = {
   image: 10 * 1024 * 1024,   // 10 MB
-  video: 500 * 1024 * 1024,  // 500 MB
+  video: 800 * 1024 * 1024,  // 800 MB
 }
 
 // Expiración del presigned POST en segundos (15 minutos)

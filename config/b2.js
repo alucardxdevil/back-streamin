@@ -39,7 +39,7 @@ export const B2_CONFIG = {
   region: process.env.B2_REGION || 'us-east-005',
   endpoint: process.env.B2_ENDPOINT || 'https://s3.us-east-005.backblazeb2.com',
   publicUrl: process.env.B2_PUBLIC_URL || 'https://f00.backblazeb2.com/file/streamin-videos',
-  maxUploadSize: (parseInt(process.env.MAX_UPLOAD_SIZE_MB) || 500) * 1024 * 1024,
+  maxUploadSize: (parseInt(process.env.MAX_UPLOAD_SIZE_MB) || 800) * 1024 * 1024,
   signedUrlExpiration: 3600,
 }
 

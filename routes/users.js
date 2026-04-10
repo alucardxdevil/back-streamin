@@ -2,7 +2,7 @@ import express from 'express';
 import { deleteUser, dislike, follow, getUser, getUserTotalViews, like, notDislike, notLike, searchUsers, unfollow, updateUser, updateUserTotalViews, getTopFollowedUsers, getFollowingUsers } from "../controllers/user.js";
 import { verifyToken } from '../verifyToken.js';
 import { addVideoToHistory, getHistory, deleteHistory, clearHistory } from "../controllers/history.js";
-import { createPlaylist, getPlaylists, getPlaylist, getSharedPlaylist, updatePlaylist, deletePlaylist, addVideoToPlaylist, removeVideoFromPlaylist } from "../controllers/playlist.js";
+import { createPlaylist, getPlaylists, getPlaylist, getSharedPlaylist, updatePlaylist, deletePlaylist, addVideoToPlaylist, removeVideoFromPlaylist, removePlaylistItem } from "../controllers/playlist.js";
 
 const router = express.Router()
 
@@ -11,6 +11,9 @@ router.get('/find/:slug', getUser)
 
 // update user
 router.put('/:id', verifyToken, updateUser)
+
+// delete user
+router.delete('/:id', verifyToken, deleteUser)
 
 router.get('/search', searchUsers)
 
@@ -53,5 +56,6 @@ router.put('/playlists/:userId/:playlistId', verifyToken, updatePlaylist)
 router.delete('/playlists/:userId/:playlistId', verifyToken, deletePlaylist)
 router.put('/playlists/:userId/:playlistId/:videoId', verifyToken, addVideoToPlaylist)
 router.delete('/playlists/:userId/:playlistId/:videoId', verifyToken, removeVideoFromPlaylist)
+router.delete('/playlists/:userId/:playlistId/item/:itemId', verifyToken, removePlaylistItem)
 
 export default router

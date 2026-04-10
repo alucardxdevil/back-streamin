@@ -19,8 +19,8 @@ import Video from '../models/Video.js'
 // TTL de la presigned URL en segundos (15 minutos)
 const PRESIGNED_URL_TTL = 900
 
-// Tamaño máximo del video en bytes (2 GB)
-const MAX_VIDEO_SIZE = 2 * 1024 * 1024 * 1024
+// Tamaño máximo del video en bytes (800 MB — beta stream-in.com)
+const MAX_VIDEO_SIZE = 800 * 1024 * 1024
 
 /**
  * POST /api/transcode/presigned-upload
@@ -49,7 +49,7 @@ export const generateVideoUploadUrl = async (req, res, next) => {
 
     // Validar tamaño
     if (fileSize && fileSize > MAX_VIDEO_SIZE) {
-      return next(createError(400, `Archivo demasiado grande. Máximo ${MAX_VIDEO_SIZE / (1024 * 1024 * 1024)} GB`))
+      return next(createError(400, `Archivo demasiado grande. Máximo ${MAX_VIDEO_SIZE / (1024 * 1024)} MB`))
     }
 
     // Generar key único para el archivo raw

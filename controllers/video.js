@@ -151,9 +151,14 @@ export const videoFilmLibrary = async (req, res, next) => {
 }
 
 export const getByTag = async (req, res, next) => {
-    const tags = req.query.tags.split(',')
+    const raw = req.query.tags || ''
+    const tags = raw.split(',').map((t) => t.trim()).filter(Boolean)
+    if (tags.length === 0) {
+        return res.status(200).json([])
+    }
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 40, 1), 100)
     try {
-        const videos = await Video.find({tags:{$in:tags}}).limit(20)
+        const videos = await Video.find({ tags: { $in: tags } }).limit(limit)
         res.status(200).json(videos)
     } catch (err) {
         next(err)

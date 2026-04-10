@@ -234,3 +234,33 @@ export const removeVideoFromPlaylist = async (req, res, next) => {
         next(err);
     }
 };
+
+/**
+ * Force remove a playlist item by the subdocument id in videos[].
+ * This is needed when the referenced Video was deleted and populate returns null,
+ * making it impossible to resolve a stable videoId on the client.
+ */
+export const removePlaylistItem = async (req, res, next) => {
+    try {
+        const { userId, playlistId, itemId } = req.params;
+
+        const updated = await Playlist.findOneAndUpdate(
+            { _id: playlistId, userId },
+            {
+                $pull: {
+                    videos: { _id: itemId }
+                },
+                $set: { updatedAt: new Date() }
+            },
+            { new: true }
+        );
+
+        if (!updated) {
+            return next(createError(404, "Playlist no encontrada"));
+        }
+
+        res.status(200).json({ message: "Elemento eliminado de la playlist" });
+    } catch (err) {
+        next(err);
+    }
+};
