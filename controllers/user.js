@@ -24,13 +24,14 @@ export const updateUser = async (req, res, next) => {
 export const deleteUser = async (req, res, next) => {
     if(req.params.id === req.user.id) {
         try {
-            // Soft delete: marcar como eliminado en lugar de borrar
-            // Esto invalidará la sesión pero mantendrá datos para auditoría
+            // Incrementar tokenVersion para invalidar todas las sesiones existentes
+            // Esto cerrará la sesión en todos los dispositivos
             await User.findByIdAndUpdate(req.params.id, {
                 $set: { 
                     isDeleted: true,
                     deletedAt: new Date(),
-                    // Invalidar email para que no pueda usarse en registro hasta que expire el token de reseteo
+                    tokenVersion: (req.user.tokenVersion || 1) + 1,
+                    // Invalidar email para que no pueda usarse en registro
                     email: `deleted_${Date.now()}_${req.params.id}@deleted.stream-in.com`,
                     // Limpiar datos sensibles
                     password: 'DELETED',

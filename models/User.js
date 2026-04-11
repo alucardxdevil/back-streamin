@@ -144,6 +144,11 @@ const UserSchema = new mongoose.Schema({
         type: Date,
         default: null,
         select: false,
+    },
+    tokenVersion: {
+        type: Number,
+        default: 1,
+        select: false,
     }
 },
 {

@@ -74,7 +74,8 @@ export const signin = async (req, res, next) => {
         if(!isCorrect) return next(createError(404, 'User or password incorrect!'))
 
         const token = jwt.sign({
-            id: user._id
+            id: user._id,
+            tokenVersion: user.tokenVersion || 1
         }, JWT)
 
         const {password, ...others} = user._doc
@@ -101,7 +102,10 @@ export const googleAuth = async (req, res, next) => {
                 return next(createError(403, 'This account has been deleted'))
             }
             
-            const token = jwt.sign({id: user._id}, JWT)
+            const token = jwt.sign({
+                id: user._id,
+                tokenVersion: user.tokenVersion || 1
+            }, JWT)
 
             res.cookie('access_token', token, {
                 httpOnly: true,
@@ -116,7 +120,10 @@ export const googleAuth = async (req, res, next) => {
                 fromGoogle: true
             })
             const savedUser = await newUser.save()
-            const token = jwt.sign({id: savedUser._id}, JWT)
+            const token = jwt.sign({
+                id: savedUser._id,
+                tokenVersion: savedUser.tokenVersion || 1
+            }, JWT)
 
             res.cookie('access_token', token, {
                 httpOnly: true,

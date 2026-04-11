@@ -12,8 +12,8 @@ export const verifyToken = async (req, res, next) => {
         if(err) return next(createError(403, 'Error authenticated!'))
         
         // Verificar si el usuario existe y no está eliminado
-        // Usar lean() para mejor rendimiento ya que solo necesitamos el flag
-        const userDoc = await User.findById(user.id).select('isDeleted deletedAt').lean()
+        // Incluye tokenVersion para invalidar sesiones antiguas
+        const userDoc = await User.findById(user.id).select('isDeleted deletedAt tokenVersion').lean()
         
         if (!userDoc) {
             // Usuario no encontrado (fue hard deleted o no existe)
@@ -21,8 +21,14 @@ export const verifyToken = async (req, res, next) => {
         }
         
         if (userDoc.isDeleted) {
-            // Usuario eliminado - limpiar cookie y rechazar
+            // Usuario eliminado - rechazar
             return next(createError(401, 'Account has been deleted'))
+        }
+        
+        // Verificar tokenVersion - si no coincide, la sesión es inválida
+        const tokenVersionFromPayload = user.tokenVersion || 1
+        if (userDoc.tokenVersion && tokenVersionFromPayload !== userDoc.tokenVersion) {
+            return next(createError(401, 'Session expired. Please login again.'))
         }
         
         req.user = user
