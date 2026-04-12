@@ -3,16 +3,49 @@ import User from '../models/User.js'
 import Video from "../models/Video.js"
 import Playlist from "../models/Playlist.js"
 import mongoose from "mongoose"
+import slugify from "slugify"
 
 export const updateUser = async (req, res, next) => {
     if(req.params.id === req.user.id) {
         try {
-            const updateUser = await User.findByIdAndUpdate(req.params.id, {
-                $set:req.body
-            },
-            {new: true}
+            const { name, ...otherFields } = req.body
+            
+            // Si se está cambiando el nombre, verificar disponibilidad
+            if (name) {
+                const currentUser = await User.findById(req.params.id).select('name')
+                if (currentUser && currentUser.name !== name) {
+                    // Verificar si el nuevo nombre ya existe
+                    const existingUser = await User.findOne({ 
+                        name: { $regex: new RegExp(`^${name}$`, 'i') },
+                        _id: { $ne: req.params.id }
+                    })
+                    
+                    if (existingUser) {
+                        return next(createError(400, 'This username is already taken'))
+                    }
+                }
+            }
+            
+            // Preparar datos a actualizar
+            const updateData = { ...otherFields }
+            
+            // Si se proporciona un nuevo nombre, generar nuevo slug
+            if (name) {
+                updateData.name = name
+                updateData.slug = slugify(name, {
+                    lower: true,
+                    strict: true,
+                    trim: true
+                })
+            }
+            
+            const updatedUser = await User.findByIdAndUpdate(
+                req.params.id,
+                { $set: updateData },
+                { new: true }
             )
-            res.status(200).json(updateUser)
+            
+            res.status(200).json(updatedUser)
         } catch (err) {
             next(err)
         }
