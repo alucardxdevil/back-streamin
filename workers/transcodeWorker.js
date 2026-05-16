@@ -369,7 +369,7 @@ const transcodeToHLS = (inputPath, outputDir, profiles, onProgress) => {
 
     args.push(
       '-f', 'hls',
-      '-hls_time', '6',
+      '-hls_time', '8',
       '-hls_playlist_type', 'vod',
       // independent_segments: cada segmento puede decodificarse por sí solo.
       // split_by_time: fuerza que los cortes sean por tiempo (no por keyframe),

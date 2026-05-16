@@ -56,7 +56,13 @@ export const editComment = async (req, res, next) => {
 
 export const getComments = async (req, res, next) => {
     try {
-        const comments = await Comment.find({videoId:req.params.videoId})
+        const comments = await Comment.find({
+            videoId: req.params.videoId,
+            $or: [
+                { moderationStatus: { $exists: false } },
+                { moderationStatus: 'approved' },
+            ],
+        }).sort({ createdAt: -1 })
         res.status(200).json(comments)
     } catch (err) {
         next(err)

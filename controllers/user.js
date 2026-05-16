@@ -26,8 +26,10 @@ export const updateUser = async (req, res, next) => {
                 }
             }
             
-            // Preparar datos a actualizar
+            // Preparar datos a actualizar (sin campos privilegiados)
             const updateData = { ...otherFields }
+            const blockSelf = ['role', 'isBanned', 'isDeleted', 'tokenVersion', 'email', 'password', 'passwordResetTokenHash', 'passwordResetExpires', 'fromGoogle']
+            for (const k of blockSelf) delete updateData[k]
             
             // Si se proporciona un nuevo nombre, generar nuevo slug
             if (name) {
@@ -86,27 +88,39 @@ export const getUser = async (req, res, next) => {
         const { slug } = req.params;
         
         // Primero intentar buscar por slug
-        let user = await User.findOne({ slug });
+        let user = await User.findOne({ slug, isDeleted: { $ne: true } });
         
         // Si no encuentra por slug, intentar por _id (para compatibilidad)
         if (!user) {
-            user = await User.findById(slug);
+            if (mongoose.Types.ObjectId.isValid(slug)) {
+                user = await User.findOne({ _id: slug, isDeleted: { $ne: true } });
+            }
         }
         
         if (!user) {
             return res.status(404).json({ message: "Usuario no encontrado" });
         }
         
-        res.status(200).json(user)
+        const safe = user.toObject ? user.toObject() : user
+        delete safe.password
+        delete safe.passwordResetTokenHash
+        delete safe.passwordResetExpires
+        res.status(200).json(safe)
     } catch (err) {
         next(err)
     }
 }
 
 export const searchUsers = async (req, res, next) => {
-    const query  = req.query.q
+    const raw = req.query.q
+    const query = raw != null ? String(raw).trim() : ''
     try {
-        const user = await User.find({name:{$regex: query, $options: 'i'}}).limit(10)
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10))
+        const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const filter = query
+            ? { name: { $regex: new RegExp(escaped, 'i') }, isDeleted: { $ne: true } }
+            : { isDeleted: { $ne: true } }
+        const user = await User.find(filter).limit(limit).select('-password')
         res.status(200).json(user)
     } catch (err) {
         next(err)

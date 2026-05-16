@@ -39,7 +39,6 @@
     "sanitize-html": "^2.13.0",
     "sharp": "^0.34.5",
     "slugify": "^1.6.6",
-    "stream-in": "file:..",
     "uuid": "^13.0.0",
     "validator": "^13.12.0",
     "winston": "^3.17.0",

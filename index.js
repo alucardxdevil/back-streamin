@@ -12,6 +12,7 @@ import transcodeRoute from './routes/transcode.js'
 import streamRoute from './routes/stream.js'
 import sitemapRoute from './routes/sitemap.js'
 import ogRoute from './routes/oembed.js'
+import panelRoute from './routes/panel.js'
 import cors from 'cors'
 import logger from './config/logger.js'
 
@@ -106,7 +107,7 @@ const corsOptions = {
   },
   credentials: true, // VITAL: Mantiene la conexión de cookies abierta
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Token', 'Range'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Token', 'Range', 'X-Stream-Panel-Key'],
   exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length'],
   // Cachear respuestas preflight (OPTIONS) por 1 hora.
   // CRÍTICO para Firefox: sin esto, Firefox envía un preflight para CADA request
@@ -129,6 +130,7 @@ app.use(express.urlencoded({ extended: true, limit: '100kb' }))
 app.set('trust proxy', 1)
 
 // ── Rutas de la API ────────────────────────────────────────────────────────────
+app.use('/api/panel', panelRoute)
 app.use('/api/users', userRoute)
 app.use('/api/videos', videoRoute)
 app.use('/api/comments', commentRoute)

@@ -149,7 +149,29 @@ const UserSchema = new mongoose.Schema({
         type: Number,
         default: 1,
         select: false,
-    }
+    },
+    /** Rol en la plataforma (público). Gestionable vía /api/panel */
+    role: {
+        type: String,
+        enum: ['user', 'creator'],
+        default: 'user',
+    },
+    /** Cuenta bloqueada por moderación / panel */
+    isBanned: {
+        type: Boolean,
+        default: false,
+    },
+    /** Baneo temporal: si es fecha futura, la cuenta no puede iniciar sesión */
+    bannedUntil: {
+        type: Date,
+        default: null,
+    },
+    /** Motivo de baneo (panel / moderación) */
+    banReason: {
+        type: String,
+        default: '',
+        maxlength: 500,
+    },
 },
 {
     timestamps: true

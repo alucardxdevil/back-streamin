@@ -4,7 +4,9 @@ import bcrypt from 'bcryptjs'
 import { createError } from "../err.js"
 import jwt from 'jsonwebtoken'
 import { verifyToken } from "../verifyToken.js"
-import cookieParser from "cookie-parser"
+import { extractAccessToken } from "../utils/extractAccessToken.js"
+import { getAccessTokenCookieOptions } from "../utils/cookieOptions.js"
+import { userPayloadWithAccessToken } from "../utils/authResponse.js"
 import fetch from "node-fetch"
 import crypto from "crypto"
 import logger from "../config/logger.js"
@@ -70,6 +72,15 @@ export const signin = async (req, res, next) => {
             return next(createError(403, 'This account has been deleted'))
         }
 
+        if (user.isBanned) {
+            return next(createError(403, 'This account has been banned'))
+        }
+
+        const now = new Date()
+        if (user.bannedUntil && user.bannedUntil > now) {
+            return next(createError(403, 'This account is temporarily banned'))
+        }
+
         const isCorrect = await bcrypt.compare(req.body.password, user.password)
         if(!isCorrect) return next(createError(404, 'User or password incorrect!'))
 
@@ -78,15 +89,10 @@ export const signin = async (req, res, next) => {
             tokenVersion: user.tokenVersion || 1
         }, JWT)
 
-        const {password, ...others} = user._doc
-
-        res.cookie('access_token', token, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            domain: '.stream-in.com',
-            maxAge: 30 * 24 * 60 * 60 * 1000 // 30 días
-        }).status(200).json(others)
+        const cookieOpts = getAccessTokenCookieOptions()
+        res.cookie('access_token', token, cookieOpts)
+            .status(200)
+            .json(userPayloadWithAccessToken(user, token))
 
     } catch (err) {
         next(err)
@@ -101,19 +107,25 @@ export const googleAuth = async (req, res, next) => {
             if (user.isDeleted) {
                 return next(createError(403, 'This account has been deleted'))
             }
+
+            if (user.isBanned) {
+                return next(createError(403, 'This account has been banned'))
+            }
+
+            const now = new Date()
+            if (user.bannedUntil && user.bannedUntil > now) {
+                return next(createError(403, 'This account is temporarily banned'))
+            }
             
             const token = jwt.sign({
                 id: user._id,
                 tokenVersion: user.tokenVersion || 1
             }, JWT)
 
-            res.cookie('access_token', token, {
-                httpOnly: true,
-                secure: true,
-                sameSite: 'none',
-                domain: '.stream-in.com',
-                maxAge: 30 * 24 * 60 * 60 * 1000 // 30 días
-            }).status(200).json(user._doc)
+            const cookieOpts = getAccessTokenCookieOptions()
+            res.cookie('access_token', token, cookieOpts)
+                .status(200)
+                .json(userPayloadWithAccessToken(user, token))
         } else {
             const newUser = new User({
                 ...req.body,
@@ -125,13 +137,10 @@ export const googleAuth = async (req, res, next) => {
                 tokenVersion: savedUser.tokenVersion || 1
             }, JWT)
 
-            res.cookie('access_token', token, {
-                httpOnly: true,
-                secure: true,
-                sameSite: 'none',
-                domain: '.stream-in.com',
-                maxAge: 30 * 24 * 60 * 60 * 1000 // 30 días
-            }).status(200).json(savedUser._doc)
+            const cookieOpts = getAccessTokenCookieOptions()
+            res.cookie('access_token', token, cookieOpts)
+                .status(200)
+                .json(userPayloadWithAccessToken(savedUser, token))
         }
     } catch (err) {
         next(err)
@@ -141,7 +150,7 @@ export const googleAuth = async (req, res, next) => {
 
 // Verificar validacion del usuario  ---pending---
 export const verifyUser = async (req, res, next) => {
-    const token = req.cookies.access_token
+    const token = extractAccessToken(req)
     if(!token) return next(createError(401, 'Not Authenticated'))
     jwt.verify(token, JWT, async (err, user) => {
         if(err) return next(createError(403, 'Token is not valid'))
@@ -156,9 +165,8 @@ export const verifyUser = async (req, res, next) => {
 export const logoutHandler = async (req, res) => {
     try {
         res.cookie('access_token', '', {
-            httpOnly: true,
+            ...getAccessTokenCookieOptions(),
             maxAge: 0,
-            path: '/'
         }).status(200).send('Logout successful');
     } catch (error) {
         console.error("Error during logout:", error);

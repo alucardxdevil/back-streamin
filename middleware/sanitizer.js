@@ -142,7 +142,8 @@ const fieldTypeMap = {
   
   // Comentarios
   comment: {
-    text: 'richText'
+    text: 'richText',
+    descriptionC: 'richText',
   }
 }
 

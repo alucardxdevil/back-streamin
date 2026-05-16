@@ -17,6 +17,13 @@ const CommentSchema = new mongoose.Schema({
         maxlength: [COMMENT_MAX_LENGTH, `El comentario no puede exceder ${COMMENT_MAX_LENGTH} caracteres`],
         trim: true,
     },
+    /** Moderación vía /api/panel — comentarios sin campo se tratan como aprobados en la UI pública */
+    moderationStatus: {
+        type: String,
+        enum: ['approved', 'pending', 'hidden'],
+        default: 'approved',
+        index: true,
+    },
 },
 {
     timestamps: true

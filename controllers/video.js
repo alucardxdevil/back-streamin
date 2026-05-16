@@ -1,6 +1,7 @@
 import { createError } from "../err.js"
 import Video from "../models/Video.js"
 import User from "../models/User.js"
+import { publicVideoVisibilityFilter } from "../utils/videoVisibility.js"
 
 export const addVideo = async (req, res, next) => {
     const newVideo = new Video({userId: req.user.id, ...req.body})
@@ -55,6 +56,10 @@ export const deleteVideo = async (req, res, next) => {
 export const getVideo = async (req, res, next) => {
     try {
         const video = await Video.findById(req.params.id)
+        if (!video) return next(createError(404, 'Video not found'))
+        if (video.visibility === 'hidden') {
+            return next(createError(404, 'Video not found'))
+        }
         res.status(200).json(video)
     } catch (err) {
         next(err)
@@ -95,7 +100,10 @@ export const random = async (req, res, next) => {
 
   try {
     // Usamos $sample para obtener un conjunto aleatorio de videos
-    const videos = await Video.aggregate([{ $sample: { size: limit } }]);
+    const videos = await Video.aggregate([
+        { $match: publicVideoVisibilityFilter() },
+        { $sample: { size: limit } },
+    ]);
 
     res.status(200).json(videos);
   } catch (err) {
@@ -105,7 +113,7 @@ export const random = async (req, res, next) => {
 
 export const trend = async (req, res, next) => {
     try {
-        const videos = await Video.find().sort({views: -1}).limit(10)
+        const videos = await Video.find(publicVideoVisibilityFilter()).sort({ views: -1 }).limit(10)
         res.status(200).json(videos)
     } catch (err) {
         next(err)
@@ -119,7 +127,7 @@ export const foll = async (req, res, next) => {
 
         const list = await Promise.all(
             followChannels.map(channelId => {
-                return Video.find({userId: channelId})
+                return Video.find({ userId: channelId, ...publicVideoVisibilityFilter() })
             })
         )
         res.status(200).json(list.flat().sort((a,b) => b.createdAt - a.createdAt))
@@ -164,7 +172,7 @@ export const getByTag = async (req, res, next) => {
     }
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 40, 1), 100)
     try {
-        const videos = await Video.find({ tags: { $in: tags } }).limit(limit)
+        const videos = await Video.find({ tags: { $in: tags }, ...publicVideoVisibilityFilter() }).limit(limit)
         res.status(200).json(videos)
     } catch (err) {
         next(err)
@@ -174,7 +182,10 @@ export const getByTag = async (req, res, next) => {
 export const search = async (req, res, next) => {
     const query  = req.query.q
     try {
-        const videos = await Video.find({title:{$regex: query, $options: 'i'}}).limit(40)
+        const videos = await Video.find({
+            title: { $regex: query, $options: 'i' },
+            ...publicVideoVisibilityFilter(),
+        }).limit(40)
         res.status(200).json(videos)
     } catch (err) {
         next(err)
@@ -191,7 +202,10 @@ export const getVideosByUser = async (req, res, next) => {
             return res.status(404).json({ message: "Usuario no encontrado" });
         }
         
-        const videos = await Video.find({ userId: user._id.toString() }).sort({ createdAt: -1 });
+        const videos = await Video.find({
+            userId: user._id.toString(),
+            ...publicVideoVisibilityFilter(),
+        }).sort({ createdAt: -1 });
         
         res.status(200).json(videos);
     } catch (err) {
@@ -228,6 +242,7 @@ export const getTopLikedVideos = async (req, res, next) => {
   try {
     const limit = parseInt(req.query.limit) || 10; // Puedes enviar un parámetro para limitar resultados
     const videos = await Video.aggregate([
+        { $match: publicVideoVisibilityFilter() },
         { $addFields: { likesCount: { $size: "$likes" } } },
         { $sort: { likesCount: -1 } },
         { $limit: limit }
@@ -243,6 +258,7 @@ export const getTopDislikedVideos = async (req, res, next) => {
     try {
     const limit = parseInt(req.query.limit) || 10; // Puedes enviar un parámetro para limitar resultados
     const videos = await Video.aggregate([
+        { $match: publicVideoVisibilityFilter() },
         { $addFields: { dislikesCount: { $size: "$dislikes" } } },
         { $sort: { dislikesCount: -1 } },
         { $limit: limit }
@@ -257,7 +273,7 @@ export const getTopDislikedVideos = async (req, res, next) => {
 export const getRecentVideos = async (req, res, next) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
-    const videos = await Video.find({})
+    const videos = await Video.find(publicVideoVisibilityFilter())
       .sort({ createdAt: -1 })
       .limit(limit);
     res.status(200).json(videos);

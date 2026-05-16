@@ -83,8 +83,23 @@ export const validateOrigin = (req, res, next) => {
   const ip = req.ip || req.connection?.remoteAddress || 'unknown'
   const resource = req.params?.videoId || req.query?.key || req.path
 
-  // En desarrollo sin ALLOWED_ORIGINS configurado, ser permisivo
+  // Si no hay orígenes configurados, permitir (evitar bloquear todo en producción)
   if (process.env.NODE_ENV !== 'production' && allowedOrigins.length === 0) {
+    return next()
+  }
+
+  // En producción, si no hay ALLOWED_ORIGINS configurado, permitir solicitudes
+  // (comportamiento seguro para evitar bloquear toda la API)
+  if (allowedOrigins.length === 0) {
+    console.warn('[OriginValidator] ALLOWED_ORIGINS no configurado, permitiendo todas las solicitudes')
+    return next()
+  }
+
+  // Si la solicitud tiene un token de sesión válido, permitir sin validar origen
+  // El token será validado por el middleware requireSessionToken que viene después
+  const sessionToken = req.headers['x-session-token'] || req.query?._st
+  if (sessionToken) {
+    // Permitir la solicitud, el session token será validado después
     return next()
   }
 

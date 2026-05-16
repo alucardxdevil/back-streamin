@@ -168,6 +168,14 @@ const VideoSchema = new mongoose.Schema({
         enum: ['video', 'image', null],
         default: null
     },
+
+    /** Visibilidad en la plataforma (moderación / panel). Por defecto público. */
+    visibility: {
+        type: String,
+        enum: ['public', 'unlisted', 'hidden'],
+        default: 'public',
+        index: true,
+    },
 },
 {
     timestamps: true
