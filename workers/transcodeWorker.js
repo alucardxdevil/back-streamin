@@ -114,16 +114,6 @@ const ALL_PROFILES = [
     audioBitrate: '96k',
     bandwidth: 696000,
   },
-  {
-    name: '240p',
-    width: 426,
-    height: 240,
-    crf: 23,
-    maxRate: '400k',
-    bufSize: '800k',
-    audioBitrate: '64k',
-    bandwidth: 464000,
-  },
 ]
 
 // ─── Detección de resolución con ffprobe ──────────────────────────────────────
@@ -180,7 +170,7 @@ const probeResolution = (inputPath) => {
  * a la resolución original del video. Usa el lado mayor (max(w,h))
  * para soportar videos verticales y horizontales.
  *
- * Siempre devuelve al menos el perfil más bajo (240p).
+ * Siempre devuelve al menos el perfil más bajo (360p).
  *
  * @param {number} inputWidth  - Ancho original del video
  * @param {number} inputHeight - Alto original del video
@@ -197,9 +187,9 @@ const getProfilesForInput = (inputWidth, inputHeight) => {
     return profileMax <= inputMax
   })
 
-  // Siempre incluir al menos 240p como mínimo
+  // Siempre incluir al menos 360p como mínimo
   if (filtered.length === 0) {
-    const lowest = ALL_PROFILES[ALL_PROFILES.length - 1] // 240p
+    const lowest = ALL_PROFILES[ALL_PROFILES.length - 1] // 360p
     return [lowest]
   }
 

@@ -182,7 +182,8 @@ export const enqueueTranscode = async (req, res, next) => {
  * Response: {
  *   videoId,
  *   status,        // 'pending' | 'processing' | 'ready' | 'error'
- *   progress,      // 0-100 (solo cuando status === 'processing')
+ *   progress,      // 0-100 mientras espera/actúa BullMQ cuando aplica (ver bullmqState)
+ *   bullmqState,    // esperado: waiting | active | completed | … | missing si Redis no encuentra job
  *   hlsMasterUrl,  // URL del master.m3u8 (solo cuando status === 'ready')
  *   qualities,     // ['1080p', '720p', '480p'] (solo cuando status === 'ready')
  *   error,         // Mensaje de error (solo cuando status === 'error')
@@ -200,12 +201,23 @@ export const getTranscodeStatus = async (req, res, next) => {
       return next(createError(404, 'Video no encontrado'))
     }
 
-    // Si hay un jobId, consultar progreso en tiempo real desde BullMQ
+    // Si hay un jobId, consultar BullMQ (detecta mismo Redis entre API y worker remoto).
     let jobProgress = null
-    if (video.transcodeJobId && video.status === 'processing') {
+    let bullmqState = null
+    if (video.transcodeJobId) {
       try {
         const jobStatus = await getJobStatus(video.transcodeJobId)
-        jobProgress = jobStatus.progress
+        if (!jobStatus.found) {
+          bullmqState = 'missing'
+        } else {
+          bullmqState = jobStatus.state
+          if (video.status === 'processing') {
+            jobProgress = jobStatus.progress ?? 0
+          } else if (video.status === 'pending') {
+            if (jobStatus.state === 'waiting' || jobStatus.state === 'delayed') jobProgress = 0
+            if (jobStatus.state === 'active') jobProgress = jobStatus.progress ?? 0
+          }
+        }
       } catch (err) {
         // No fallar si Redis no está disponible
         console.warn('[Transcode] No se pudo consultar progreso del job:', err.message)
@@ -218,6 +230,7 @@ export const getTranscodeStatus = async (req, res, next) => {
         videoId,
         status: video.status,
         progress: jobProgress,
+        bullmqState,
         hlsMasterUrl: video.hlsMasterUrl,
         qualities: video.qualities,
         duration: video.duration,

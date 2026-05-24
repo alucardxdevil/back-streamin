@@ -1,12 +1,12 @@
-import mongoose from "mongoose"
 import User from '../models/User.js'
 import bcrypt from 'bcryptjs'
 import { createError } from "../err.js"
 import jwt from 'jsonwebtoken'
-import { verifyToken } from "../verifyToken.js"
-import { extractAccessToken } from "../utils/extractAccessToken.js"
 import { getAccessTokenCookieOptions } from "../utils/cookieOptions.js"
 import { userPayloadWithAccessToken } from "../utils/authResponse.js"
+import { validatePassword } from "../middleware/validateAuth.js"
+import { verifyGoogleIdToken } from "../utils/googleTokenVerify.js"
+import { handleMongoDuplicateError } from "../utils/authErrors.js"
 import fetch from "node-fetch"
 import crypto from "crypto"
 import logger from "../config/logger.js"
@@ -21,179 +21,183 @@ function hashPasswordResetToken(rawToken) {
     return crypto.createHash('sha256').update(rawToken, 'utf8').digest('hex')
 }
 
-const validatePassword = (password) => {
-    if (!password || password.length < 8) {
-        return { valid: false, message: 'La contraseña debe tener al menos 8 caracteres' };
+function issueAuthResponse(res, userDoc, token) {
+    const cookieOpts = getAccessTokenCookieOptions()
+    return res
+        .cookie('access_token', token, cookieOpts)
+        .status(200)
+        .json(userPayloadWithAccessToken(userDoc, token))
+}
+
+function createAccessToken(userDoc) {
+    return jwt.sign({
+        id: userDoc._id,
+        tokenVersion: userDoc.tokenVersion || 1
+    }, JWT)
+}
+
+async function assertUserCanLogin(user) {
+    if (user.isDeleted) {
+        throw createError(403, 'This account has been deleted')
     }
-    if (!/[A-Z]/.test(password)) {
-        return { valid: false, message: 'La contraseña debe tener al menos una mayúscula' };
+    if (user.isBanned) {
+        throw createError(403, 'This account has been banned')
     }
-    if (!/[a-z]/.test(password)) {
-        return { valid: false, message: 'La contraseña debe tener al menos una minúscula' };
+    const now = new Date()
+    if (user.bannedUntil && user.bannedUntil > now) {
+        throw createError(403, 'This account is temporarily banned')
     }
-    if (!/[0-9]/.test(password)) {
-        return { valid: false, message: 'La contraseña debe tener al menos un número' };
-    }
-    return { valid: true };
-};
+}
 
 export const signup = async (req, res, next) => {
-
-    const {password, ...rest} = req.body
-
-    if (!password) {
-        return res.status(400).send('Password is required')
-    }
-
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.valid) {
-        return res.status(400).json({ message: passwordValidation.message });
-    }
+    const { password, ...rest } = req.body
 
     try {
         const salt = bcrypt.genSaltSync(10)
         const hash = bcrypt.hashSync(password, salt)
-        const newUser = new User({...rest, password: hash})
+        const newUser = new User({ ...rest, password: hash })
 
         await newUser.save()
-        res.status(200).send('User register complete')
+        return res.status(201).json({
+            success: true,
+            message: 'User registered successfully',
+        })
     } catch (err) {
+        if (handleMongoDuplicateError(err, res)) return
         next(err)
     }
 }
+
+/** Alias for signup — same handler */
+export const register = signup
 
 export const signin = async (req, res, next) => {
     try {
-        const user = await User.findOne({email: req.body.email})
-        if(!user) return next(createError(404, 'User or password incorrect!'))
+        const user = await User.findOne({ email: req.body.email })
+        if (!user) return next(createError(404, 'User or password incorrect!'))
 
-        // Verificar si la cuenta ha sido eliminada
-        if (user.isDeleted) {
-            return next(createError(403, 'This account has been deleted'))
-        }
+        await assertUserCanLogin(user)
 
-        if (user.isBanned) {
-            return next(createError(403, 'This account has been banned'))
-        }
-
-        const now = new Date()
-        if (user.bannedUntil && user.bannedUntil > now) {
-            return next(createError(403, 'This account is temporarily banned'))
+        if (user.fromGoogle && !user.password) {
+            return next(createError(400, 'This account uses Google Sign-In. Please sign in with Google.'))
         }
 
         const isCorrect = await bcrypt.compare(req.body.password, user.password)
-        if(!isCorrect) return next(createError(404, 'User or password incorrect!'))
+        if (!isCorrect) return next(createError(404, 'User or password incorrect!'))
 
-        const token = jwt.sign({
-            id: user._id,
-            tokenVersion: user.tokenVersion || 1
-        }, JWT)
-
-        const cookieOpts = getAccessTokenCookieOptions()
-        res.cookie('access_token', token, cookieOpts)
-            .status(200)
-            .json(userPayloadWithAccessToken(user, token))
-
+        const token = createAccessToken(user)
+        return issueAuthResponse(res, user, token)
     } catch (err) {
         next(err)
     }
 }
+
+/** Alias for signin — same handler */
+export const login = signin
 
 export const googleAuth = async (req, res, next) => {
     try {
-        const user = await User.findOne({email: req.body.email})
-        if(user) {
-            // Verificar si la cuenta ha sido eliminada
-            if (user.isDeleted) {
-                return next(createError(403, 'This account has been deleted'))
-            }
-
-            if (user.isBanned) {
-                return next(createError(403, 'This account has been banned'))
-            }
-
-            const now = new Date()
-            if (user.bannedUntil && user.bannedUntil > now) {
-                return next(createError(403, 'This account is temporarily banned'))
-            }
-            
-            const token = jwt.sign({
-                id: user._id,
-                tokenVersion: user.tokenVersion || 1
-            }, JWT)
-
-            const cookieOpts = getAccessTokenCookieOptions()
-            res.cookie('access_token', token, cookieOpts)
-                .status(200)
-                .json(userPayloadWithAccessToken(user, token))
-        } else {
-            const newUser = new User({
-                ...req.body,
-                fromGoogle: true
-            })
-            const savedUser = await newUser.save()
-            const token = jwt.sign({
-                id: savedUser._id,
-                tokenVersion: savedUser.tokenVersion || 1
-            }, JWT)
-
-            const cookieOpts = getAccessTokenCookieOptions()
-            res.cookie('access_token', token, cookieOpts)
-                .status(200)
-                .json(userPayloadWithAccessToken(savedUser, token))
+        let profile = {
+            email: req.body.email,
+            name: req.body.name,
+            img: req.body.img,
+            googleId: req.body.googleId,
         }
+
+        if (req.body.idToken) {
+            const verified = await verifyGoogleIdToken(req.body.idToken)
+            if (!verified) {
+                return next(createError(401, 'Invalid Google token. Please try again.'))
+            }
+            profile = {
+                email: verified.email || profile.email,
+                name: verified.name || profile.name,
+                img: verified.img || profile.img,
+                googleId: verified.googleId,
+            }
+        }
+
+        if (!profile.email) {
+            return next(createError(400, 'Google email is required'))
+        }
+
+        let user = await User.findOne({
+            $or: [
+                { email: profile.email },
+                ...(profile.googleId ? [{ googleId: profile.googleId }] : []),
+            ],
+        })
+
+        if (user) {
+            await assertUserCanLogin(user)
+
+            const updates = {}
+            if (profile.googleId && !user.googleId) updates.googleId = profile.googleId
+            if (!user.fromGoogle) updates.fromGoogle = true
+            if (profile.img && !user.img) updates.img = profile.img
+            if (Object.keys(updates).length > 0) {
+                await User.updateOne({ _id: user._id }, { $set: updates })
+                user = await User.findById(user._id)
+            }
+
+            const token = createAccessToken(user)
+            return issueAuthResponse(res, user, token)
+        }
+
+        const newUser = new User({
+            name: profile.name || profile.email.split('@')[0],
+            email: profile.email,
+            img: profile.img,
+            googleId: profile.googleId || undefined,
+            fromGoogle: true,
+        })
+
+        try {
+            await newUser.save()
+        } catch (err) {
+            if (handleMongoDuplicateError(err, res)) return
+            throw err
+        }
+
+        const token = createAccessToken(newUser)
+        return issueAuthResponse(res, newUser, token)
     } catch (err) {
         next(err)
     }
 }
-
-
-// Verificar validacion del usuario  ---pending---
-export const verifyUser = async (req, res, next) => {
-    const token = extractAccessToken(req)
-    if(!token) return next(createError(401, 'Not Authenticated'))
-    jwt.verify(token, JWT, async (err, user) => {
-        if(err) return next(createError(403, 'Token is not valid'))
-        req.user = user 
-        const foundUser = await User.findById(req.user.id)
-        if(!foundUser) return next(createError(404, 'User not found'))
-        const {password, ...others} = foundUser._doc
-        res.status(200).json(others)
-    })
-}   
 
 export const logoutHandler = async (req, res) => {
     try {
         res.cookie('access_token', '', {
             ...getAccessTokenCookieOptions(),
             maxAge: 0,
-        }).status(200).send('Logout successful');
+        }).status(200).json({ success: true, message: 'Logout successful' })
     } catch (error) {
-        console.error("Error during logout:", error);
-        res.status(500).send('Internal Server Error');
-    }    
+        console.error("Error during logout:", error)
+        res.status(500).json({ success: false, message: 'Internal Server Error' })
+    }
 }
 
 export const forgotPassword = async (req, res, next) => {
     const email = (req.body?.email || '').trim().toLowerCase()
 
     if (!email) {
-        return res.status(400).json({ message: 'Email is required.' })
+        return res.status(400).json({ success: false, message: 'Email is required.' })
     }
 
     try {
         const user = await User.findOne({ email })
 
-        // Always return success if the user does not exist or is a Google-only account
-        // to avoid user enumeration and to prevent sending reset links for Google users.
         if (!user || user.fromGoogle) {
             return res.status(200).json({
+                success: true,
                 message: 'If the account exists, a password recovery email has been sent.'
             })
         }
 
         if (!RESEND_API_KEY) {
             return res.status(500).json({
+                success: false,
                 message: 'Password recovery service is not configured yet.'
             })
         }
@@ -249,6 +253,7 @@ export const forgotPassword = async (req, res, next) => {
                 message: fetchErr?.message,
             })
             return res.status(502).json({
+                success: false,
                 message: 'Could not send password recovery email.',
                 details: 'Resend request failed (network or DNS).'
             })
@@ -266,6 +271,7 @@ export const forgotPassword = async (req, res, next) => {
                 error: resendError,
             })
             return res.status(502).json({
+                success: false,
                 message: 'Could not send password recovery email.',
                 status: resendResponse.status,
                 details: resendError
@@ -273,6 +279,7 @@ export const forgotPassword = async (req, res, next) => {
         }
 
         return res.status(200).json({
+            success: true,
             message: 'If the account exists, a password recovery email has been sent.'
         })
     } catch (err) {
@@ -285,15 +292,15 @@ export const resetPasswordWithToken = async (req, res, next) => {
     const password = req.body?.password
 
     if (!rawToken) {
-        return res.status(400).json({ message: 'Reset token is required.' })
+        return res.status(400).json({ success: false, message: 'Reset token is required.' })
     }
     if (!password || typeof password !== 'string') {
-        return res.status(400).json({ message: 'Password is required.' })
+        return res.status(400).json({ success: false, message: 'Password is required.' })
     }
-    
-    const passwordValidation = validatePassword(password);
+
+    const passwordValidation = validatePassword(password)
     if (!passwordValidation.valid) {
-        return res.status(400).json({ message: passwordValidation.message });
+        return res.status(400).json({ success: false, message: passwordValidation.message })
     }
 
     try {
@@ -305,6 +312,7 @@ export const resetPasswordWithToken = async (req, res, next) => {
 
         if (!user) {
             return res.status(400).json({
+                success: false,
                 message: 'This reset link is invalid or has expired. Please request a new one.',
             })
         }
@@ -321,6 +329,7 @@ export const resetPasswordWithToken = async (req, res, next) => {
         )
 
         return res.status(200).json({
+            success: true,
             message: 'Your password has been updated. You can sign in with your new password.',
         })
     } catch (err) {

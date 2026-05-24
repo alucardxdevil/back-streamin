@@ -59,6 +59,11 @@ const UserSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    googleId: {
+        type: String,
+        sparse: true,
+        unique: true,
+    },
     descriptionAccount: {
         type: String,
         maxlength: [USER_DESC_MAX, `La descripción no puede exceder ${USER_DESC_MAX} caracteres`],

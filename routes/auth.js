@@ -1,24 +1,35 @@
 import express from 'express';
-import { forgotPassword, googleAuth, logoutHandler, resetPasswordWithToken, signin, signup } from "../controllers/auth.js";
+import {
+    forgotPassword,
+    googleAuth,
+    login,
+    logoutHandler,
+    register,
+    resetPasswordWithToken,
+    signin,
+    signup,
+} from "../controllers/auth.js";
+import {
+    validateGoogleBody,
+    validateSigninBody,
+    validateSignupBody,
+} from "../middleware/validateAuth.js";
 
 const router = express.Router()
 
-// create a user
-router.post('/signup', signup)
+// Email/password registration
+router.post('/signup', validateSignupBody, signup)
+router.post('/register', validateSignupBody, register)
 
-// sign in
-router.post('/signin', signin)
+// Email/password login
+router.post('/signin', validateSigninBody, signin)
+router.post('/login', validateSigninBody, login)
 
-//google auth
-router.post('/google', googleAuth)
+// Google OAuth (client obtains token; server verifies idToken when provided)
+router.post('/google', validateGoogleBody, googleAuth)
 
-// logout
 router.post('/logout', logoutHandler)
-
-// forgot password
 router.post('/forgot-password', forgotPassword)
-
-// reset password (token from email)
 router.post('/reset-password', resetPasswordWithToken)
 
 export default router
