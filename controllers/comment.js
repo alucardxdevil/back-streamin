@@ -1,12 +1,47 @@
 import { createError } from "../err.js"
 import Comment from "../models/Comments.js"
 import Video from "../models/Video.js"
+import User from "../models/User.js"
+
+async function enrichCommentsWithUsers(comments) {
+    const userIds = [...new Set(comments.map((c) => c.userId).filter(Boolean))]
+    if (userIds.length === 0) {
+        return comments.map((c) => ({
+            ...c,
+            userName: null,
+            userImg: null,
+            userSlug: null,
+        }))
+    }
+
+    const users = await User.find({
+        _id: { $in: userIds },
+        isDeleted: { $ne: true },
+    })
+        .select('name slug img')
+        .lean()
+
+    const userMap = new Map(users.map((u) => [String(u._id), u]))
+
+    return comments.map((c) => {
+        const user = userMap.get(String(c.userId))
+        return {
+            ...c,
+            userName: user?.name ?? 'Usuario',
+            userImg: user?.img ?? null,
+            userSlug: user?.slug ?? null,
+        }
+    })
+}
 
 export const addComment = async (req, res, next) => {
     const newComment = new Comment({...req.body, userId:req.user.id})
     try {
         const savedComment = await newComment.save()
-        res.status(200).send(savedComment)
+        const [enriched] = await enrichCommentsWithUsers([
+            savedComment.toObject ? savedComment.toObject() : savedComment,
+        ])
+        res.status(200).send(enriched)
     } catch (err) {
         next(err)
     }
@@ -48,7 +83,10 @@ export const editComment = async (req, res, next) => {
             { $set: { descriptionC: descriptionC.trim() } },
             { new: true }
         )
-        res.status(200).json(updatedComment)
+        const [enriched] = await enrichCommentsWithUsers([
+            updatedComment.toObject ? updatedComment.toObject() : updatedComment,
+        ])
+        res.status(200).json(enriched)
     } catch (err) {
         next(err)
     }
@@ -62,8 +100,10 @@ export const getComments = async (req, res, next) => {
                 { moderationStatus: { $exists: false } },
                 { moderationStatus: 'approved' },
             ],
-        }).sort({ createdAt: -1 })
-        res.status(200).json(comments)
+        }).sort({ createdAt: -1 }).lean()
+
+        const enriched = await enrichCommentsWithUsers(comments)
+        res.status(200).json(enriched)
     } catch (err) {
         next(err)
     }
