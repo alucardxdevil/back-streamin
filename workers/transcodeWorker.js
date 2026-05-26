@@ -59,6 +59,22 @@ const HLS_BASE_URL = process.env.HLS_BASE_URL || process.env.B2_PUBLIC_URL
 // ─── Directorio temporal ──────────────────────────────────────────────────────
 const TEMP_DIR = process.env.TEMP_DIR || '/tmp/transcode'
 
+// ─── Parámetros configurables de transcodificación ────────────────────────────
+// FFMPEG_PRESET: balance velocidad/compresión.
+//   ultrafast | superfast | veryfast | faster | fast | medium | slow | …
+//   "veryfast" publica ~3× más rápido que "medium" con sólo 5–7% más tamaño.
+const FFMPEG_PRESET = process.env.FFMPEG_PRESET || 'veryfast'
+
+// HLS_TIME_SECONDS: duración objetivo de cada segmento .ts.
+//   Más corto = ABR ramp-up más rápido y mejor recuperación de buffer en móvil.
+//   Recomendado: 4. Antes era 8 (legacy).
+const HLS_TIME_SECONDS = parseInt(process.env.HLS_TIME_SECONDS) || 4
+
+// FFMPEG_THREADS: hilos por proceso FFmpeg. Importante cuando hay múltiples
+//   workers en paralelo, para que no se peleen por toda la CPU.
+//   0 = auto (todos los cores). Recomendado: floor(cores / WORKER_CONCURRENCY).
+const FFMPEG_THREADS = parseInt(process.env.FFMPEG_THREADS) || 0
+
 // ─── Catálogo completo de perfiles HLS ────────────────────────────────────────
 /**
  * Cada perfil define:
@@ -334,15 +350,21 @@ const transcodeToHLS = (inputPath, outputDir, profiles, onProgress) => {
       )
     })
 
-    // Opciones globales de optimización
+    // Opciones globales de optimización.
+    // -preset y -threads ahora son configurables vía .env para escalar la
+    // concurrencia de workers sin pelear por toda la CPU.
     args.push(
-      '-preset', 'medium',
+      '-preset', FFMPEG_PRESET,
       '-profile:v', 'main',
       '-pix_fmt', 'yuv420p',
       '-movflags', '+faststart',
-      '-g', '48',
+      // Keyframes alineados con el límite del segmento HLS: garantiza que el
+      // segmenter pueda cortar exactamente cada HLS_TIME_SECONDS sin reencode.
+      '-force_key_frames', `expr:gte(t,n_forced*${HLS_TIME_SECONDS})`,
       '-sc_threshold', '0',
-      '-keyint_min', '48',
+      // -threads = 0 deja que ffmpeg use todos los cores (default histórico).
+      // Cuando hay varios workers en paralelo conviene limitarlo.
+      '-threads', String(FFMPEG_THREADS),
       // Normalizar timestamps de salida a partir de 0.
       // Sin esto, si el MP4 fuente tiene un PTS offset (muy común en archivos
       // con edit lists o cuando el primer keyframe no está en t=0), FFmpeg
@@ -359,7 +381,7 @@ const transcodeToHLS = (inputPath, outputDir, profiles, onProgress) => {
 
     args.push(
       '-f', 'hls',
-      '-hls_time', '8',
+      '-hls_time', String(HLS_TIME_SECONDS),
       '-hls_playlist_type', 'vod',
       // independent_segments: cada segmento puede decodificarse por sí solo.
       // split_by_time: fuerza que los cortes sean por tiempo (no por keyframe),
@@ -453,7 +475,10 @@ const transcodeToHLS = (inputPath, outputDir, profiles, onProgress) => {
  * @param {Array}  profiles  - Perfiles usados en esta transcodificación
  */
 const uploadHLSToB2 = async (localDir, b2Prefix, profiles) => {
-  const UPLOAD_CONCURRENCY = 5 // Subir 5 archivos simultáneamente
+  // Subida en paralelo. Configurable: con preset=veryfast, FFmpeg ya no es el
+  // bottleneck y el upload pasa a serlo. Subir 5→10 simultáneos típicamente
+  // baja a la mitad el tiempo total de upload sin saturar la NIC.
+  const UPLOAD_CONCURRENCY = parseInt(process.env.B2_UPLOAD_CONCURRENCY) || 10
 
   // Recopilar todos los archivos a subir
   const filesToUpload = []

@@ -41,9 +41,14 @@ const SIGNED_URL_TTL = parseInt(process.env.SIGNED_URL_TTL_SECONDS) || 1200
 const CACHE_TS_BROWSER  = parseInt(process.env.CACHE_TS_BROWSER)  || 86400   // 24h navegador
 const CACHE_TS_CDN      = parseInt(process.env.CACHE_TS_CDN)      || 604800  // 7 días Cloudflare edge
 
-// Playlists de calidad .m3u8 — Semi-estáticos, cacheo corto
-const CACHE_M3U8_BROWSER = parseInt(process.env.CACHE_M3U8_BROWSER) || 5     // 5s navegador
-const CACHE_M3U8_CDN     = parseInt(process.env.CACHE_M3U8_CDN)     || 60    // 60s Cloudflare edge
+// Playlists de calidad .m3u8 — Para VOD listo (status='ready') son INMUTABLES.
+// Cacheo agresivo en el edge; navegador valida con max-age corto por si re-transcodificamos.
+const CACHE_M3U8_BROWSER = parseInt(process.env.CACHE_M3U8_BROWSER) || 300       // 5 min navegador
+const CACHE_M3U8_CDN     = parseInt(process.env.CACHE_M3U8_CDN)     || 2592000   // 30 días Cloudflare edge
+
+// master.m3u8 — Cacheo separado (más corto que child playlists por si cambian las qualities)
+const CACHE_MASTER_BROWSER = parseInt(process.env.CACHE_MASTER_BROWSER) || 60     // 1 min navegador
+const CACHE_MASTER_CDN     = parseInt(process.env.CACHE_MASTER_CDN)     || 86400  // 24h Cloudflare edge
 
 // Video directo (legacy/fallback) — Estático, cacheo moderado
 const CACHE_VIDEO_BROWSER = parseInt(process.env.CACHE_VIDEO_BROWSER) || 3600  // 1h navegador
@@ -307,12 +312,24 @@ export const proxyVideoMaster = async (req, res, next) => {
       const sessionToken = req.headers['x-session-token'] || req.query?._st || null
       const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, video.hlsBaseKey, sessionToken)
 
+      // master.m3u8: solo es inmutable cuando el video está listo (status='ready').
+      // En 'processing' las URLs internas pueden cambiar, así que no cacheamos.
+      const isReady = video.status === 'ready'
+      const cacheHeaders = isReady
+        ? {
+            'Cache-Control': `public, max-age=${CACHE_MASTER_BROWSER}, s-maxage=${CACHE_MASTER_CDN}, immutable`,
+            'CDN-Cache-Control': `max-age=${CACHE_MASTER_CDN}`,
+          }
+        : {
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+          }
+
       res.set({
         'Content-Type': 'application/vnd.apple.mpegurl',
-        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        ...cacheHeaders,
         'X-Content-Type-Options': 'nosniff',
-        // Cabeceras de seguridad adicionales
         'X-Frame-Options': 'SAMEORIGIN',
+        'Vary': 'Accept-Encoding',
       })
       return res.send(rewritten)
     }
@@ -323,11 +340,13 @@ export const proxyVideoMaster = async (req, res, next) => {
 
     const responseHeaders = {
       'Content-Type': contentType,
-      // Browser & Edge Cache: video directo cacheable por Cloudflare
+      // Browser & Edge Cache: video directo cacheable por Cloudflare.
+      // No incluimos "Range" en Vary porque fragmentaría el cache: cada
+      // valor único de Range crearía una entrada distinta en el edge.
       'Cache-Control': `public, max-age=${CACHE_VIDEO_BROWSER}, s-maxage=${CACHE_VIDEO_CDN}`,
       'CDN-Cache-Control': `max-age=${CACHE_VIDEO_CDN}`,
       'X-Content-Type-Options': 'nosniff',
-      'Vary': 'Accept-Encoding, Range',
+      'Vary': 'Accept-Encoding',
     }
 
     const contentLength = b2Response.headers.get('content-length')
