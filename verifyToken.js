@@ -2,8 +2,9 @@ import jwt from 'jsonwebtoken'
 import { createError } from './err.js'
 import User from './models/User.js'
 import { extractAccessToken } from './utils/extractAccessToken.js'
+import { getJwtSecret } from './utils/secrets.js'
 
-const JWT = process.env.JWT || 'token.01010101'
+const JWT = getJwtSecret()
 
 export const verifyToken = async (req, res, next) => {
   const token = extractAccessToken(req)
@@ -12,7 +13,7 @@ export const verifyToken = async (req, res, next) => {
   }
 
   try {
-    const user = jwt.verify(token, JWT)
+    const user = jwt.verify(token, JWT, { algorithms: ['HS256'] })
 
     const userDoc = await User.findById(user.id).select('isDeleted deletedAt tokenVersion').lean()
 

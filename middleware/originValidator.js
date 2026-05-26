@@ -88,18 +88,15 @@ export const validateOrigin = (req, res, next) => {
     return next()
   }
 
-  // En producción, si no hay ALLOWED_ORIGINS configurado, permitir solicitudes
-  // (comportamiento seguro para evitar bloquear toda la API)
+  // En producción sin ALLOWED_ORIGINS configurado: denegar acceso
   if (allowedOrigins.length === 0) {
-    console.warn('[OriginValidator] ALLOWED_ORIGINS no configurado, permitiendo todas las solicitudes')
-    return next()
-  }
-
-  // Si la solicitud tiene un token de sesión válido, permitir sin validar origen
-  // El token será validado por el middleware requireSessionToken que viene después
-  const sessionToken = req.headers['x-session-token'] || req.query?._st
-  if (sessionToken) {
-    // Permitir la solicitud, el session token será validado después
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[OriginValidator] ALLOWED_ORIGINS no configurado en producción — denegando solicitudes de streaming')
+      return res.status(503).json({
+        success: false,
+        message: 'Servicio de streaming no configurado correctamente',
+      })
+    }
     return next()
   }
 

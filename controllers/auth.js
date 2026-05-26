@@ -10,8 +10,10 @@ import { handleMongoDuplicateError } from "../utils/authErrors.js"
 import fetch from "node-fetch"
 import crypto from "crypto"
 import logger from "../config/logger.js"
+import { getJwtSecret } from "../utils/secrets.js"
 
-const JWT = process.env.JWT || 'token.01010101'
+const JWT = getJwtSecret()
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
 const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
@@ -29,11 +31,24 @@ function issueAuthResponse(res, userDoc, token) {
         .json(userPayloadWithAccessToken(userDoc, token))
 }
 
+function escapeHtml(str) {
+    if (!str || typeof str !== 'string') return ''
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+}
+
 function createAccessToken(userDoc) {
     return jwt.sign({
         id: userDoc._id,
         tokenVersion: userDoc.tokenVersion || 1
-    }, JWT)
+    }, JWT, {
+        expiresIn: JWT_EXPIRES_IN,
+        algorithm: 'HS256',
+    })
 }
 
 async function assertUserCanLogin(user) {
@@ -97,24 +112,24 @@ export const login = signin
 
 export const googleAuth = async (req, res, next) => {
     try {
-        let profile = {
-            email: req.body.email,
-            name: req.body.name,
-            img: req.body.img,
-            googleId: req.body.googleId,
+        if (!req.body.idToken) {
+            return next(createError(401, 'Google idToken is required'))
         }
 
-        if (req.body.idToken) {
-            const verified = await verifyGoogleIdToken(req.body.idToken)
-            if (!verified) {
-                return next(createError(401, 'Invalid Google token. Please try again.'))
-            }
-            profile = {
-                email: verified.email || profile.email,
-                name: verified.name || profile.name,
-                img: verified.img || profile.img,
-                googleId: verified.googleId,
-            }
+        const verified = await verifyGoogleIdToken(req.body.idToken)
+        if (!verified) {
+            return next(createError(401, 'Invalid Google token. Please try again.'))
+        }
+
+        if (!verified.emailVerified) {
+            return next(createError(401, 'Google email must be verified'))
+        }
+
+        const profile = {
+            email: verified.email,
+            name: verified.name,
+            img: verified.img,
+            googleId: verified.googleId,
         }
 
         if (!profile.email) {
@@ -221,7 +236,7 @@ export const forgotPassword = async (req, res, next) => {
         const html = `
           <div style="font-family: Arial, sans-serif; color: #111;">
             <h2 style="margin-bottom: 8px;">Password Recovery</h2>
-            <p>Hello ${user.name || ''},</p>
+            <p>Hello ${escapeHtml(user.name || '')},</p>
             <p>We received a request to recover your password at stream-in.</p>
             <p>
               Click on the following link to continue:
@@ -255,7 +270,6 @@ export const forgotPassword = async (req, res, next) => {
             return res.status(502).json({
                 success: false,
                 message: 'Could not send password recovery email.',
-                details: 'Resend request failed (network or DNS).'
             })
         }
 
@@ -273,8 +287,6 @@ export const forgotPassword = async (req, res, next) => {
             return res.status(502).json({
                 success: false,
                 message: 'Could not send password recovery email.',
-                status: resendResponse.status,
-                details: resendError
             })
         }
 

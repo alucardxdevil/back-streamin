@@ -1,35 +1,36 @@
 /**
- * Sistema de Tokens de Sesión Anónimos — stream-in
+ * Sistema de Tokens de Sesi?n An?nimos ��� stream-in
  *
- * Capa de protección: SESIÓN ANÓNIMA (Capa 3)
- * Amenaza cubierta: Solicitudes realizadas fuera del contexto de la aplicación.
- *   Un atacante que copie una URL de video no tendrá un token de sesión válido
- *   emitido por el servidor, por lo que su solicitud será rechazada.
+ * Capa de protecci?n: SESI��N AN��NIMA (Capa 3)
+ * Amenaza cubierta: Solicitudes realizadas fuera del contexto de la aplicaci?n.
+ *   Un atacante que copie una URL de video no tendr? un token de sesi?n v?lido
+ *   emitido por el servidor, por lo que su solicitud ser? rechazada.
  *
  * Flujo:
- *  1. El cliente carga la aplicación → GET /api/stream/session
+ *  1. El cliente carga la aplicaci?n ��� GET /api/stream/session
  *  2. El servidor emite un JWT firmado con vida corta (30 min)
  *  3. El frontend almacena el token en memoria (no en localStorage)
  *  4. Cada solicitud de video incluye el token en el header X-Session-Token
  *  5. El middleware verifica el token antes de procesar la solicitud
  *
- * El token NO contiene información de usuario — solo un ID de sesión aleatorio
- * y metadatos de emisión. Su propósito es demostrar que la solicitud proviene
- * de una sesión iniciada dentro de la aplicación.
+ * El token NO contiene informaci?n de usuario ��� solo un ID de sesi?n aleatorio
+ * y metadatos de emisi?n. Su prop?sito es demostrar que la solicitud proviene
+ * de una sesi?n iniciada dentro de la aplicaci?n.
  */
 
 import jwt from 'jsonwebtoken'
 import { v4 as uuidv4 } from 'uuid'
 import { logVideoAccess, logSessionIssued } from '../config/logger.js'
+import { getSessionSecret } from '../utils/secrets.js'
 
-// Duración del token de sesión anónimo (30 minutos)
+// Duraci?n del token de sesi?n an?nimo (30 minutos)
 const SESSION_TOKEN_TTL = parseInt(process.env.SESSION_TOKEN_TTL_SECONDS) || 1800
 
-// Secret para firmar tokens de sesión (diferente al JWT de autenticación)
-const SESSION_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || 'session-secret-change-in-production'
+// Secret para firmar tokens de sesi?n (diferente al JWT de autenticaci?n)
+const SESSION_SECRET = getSessionSecret()
 
 /**
- * Genera un nuevo token de sesión anónimo.
+ * Genera un nuevo token de sesi?n an?nimo.
  *
  * @param {string} ip - IP del cliente (para binding opcional)
  * @returns {{ token: string, sessionId: string, expiresIn: number }}
@@ -42,8 +43,8 @@ export const generateSessionToken = (ip = null) => {
     sid: sessionId,
     iat: issuedAt,
     type: 'anon_session',
-    // Incluir IP parcial como contexto (no como validación estricta)
-    // Solo los primeros 2 octetos para no ser demasiado restrictivo con IPs dinámicas
+    // Incluir IP parcial como contexto (no como validaci?n estricta)
+    // Solo los primeros 2 octetos para no ser demasiado restrictivo con IPs din?micas
     ipHint: ip ? ip.split('.').slice(0, 2).join('.') : null,
   }
 
@@ -60,7 +61,7 @@ export const generateSessionToken = (ip = null) => {
 }
 
 /**
- * Verifica un token de sesión anónimo.
+ * Verifica un token de sesi?n an?nimo.
  *
  * @param {string} token
  * @returns {{ valid: boolean, payload: object|null, reason: string|null }}
@@ -75,9 +76,9 @@ export const verifySessionToken = (token) => {
       algorithms: ['HS256'],
     })
 
-    // Verificar que sea un token de sesión anónima (no un JWT de usuario)
+    // Verificar que sea un token de sesi?n an?nima (no un JWT de usuario)
     if (payload.type !== 'anon_session') {
-      return { valid: false, payload: null, reason: 'Tipo de token inválido' }
+      return { valid: false, payload: null, reason: 'Tipo de token inv?lido' }
     }
 
     return { valid: true, payload, reason: null }
@@ -88,15 +89,15 @@ export const verifySessionToken = (token) => {
     if (err.name === 'JsonWebTokenError') {
       return { valid: false, payload: null, reason: 'Token malformado' }
     }
-    return { valid: false, payload: null, reason: 'Error de verificación' }
+    return { valid: false, payload: null, reason: 'Error de verificaci?n' }
   }
 }
 
 /**
  * Controlador: POST /api/stream/session
  *
- * Emite un nuevo token de sesión anónimo.
- * El frontend debe llamar a este endpoint al cargar la aplicación.
+ * Emite un nuevo token de sesi?n an?nimo.
+ * El frontend debe llamar a este endpoint al cargar la aplicaci?n.
  */
 export const issueSessionToken = (req, res) => {
   const ip = req.ip || req.connection?.remoteAddress || 'unknown'
@@ -111,14 +112,14 @@ export const issueSessionToken = (req, res) => {
     data: {
       sessionToken: token,
       expiresIn,
-      // Indicar al cliente cuándo renovar (5 minutos antes de expirar)
+      // Indicar al cliente cu?ndo renovar (5 minutos antes de expirar)
       renewBefore: expiresIn - 300,
     },
   })
 }
 
 /**
- * Middleware: Valida el token de sesión anónimo en solicitudes de video.
+ * Middleware: Valida el token de sesi?n an?nimo en solicitudes de video.
  *
  * El token puede venir en:
  *  - Header: X-Session-Token
@@ -146,19 +147,11 @@ export const requireSessionToken = (req, res, next) => {
   const { valid, payload, reason } = verifySessionToken(token)
 
   if (!valid) {
-    // En desarrollo, advertir pero no bloquear si no hay SESSION_SECRET configurado
-    if (process.env.NODE_ENV !== 'production' && !process.env.SESSION_SECRET) {
-      console.warn(`[SessionToken] Advertencia: token inválido en desarrollo (${reason}). Permitiendo acceso.`)
-      req.sessionPayload = null
-      req.sessionValid = false
-      return next()
-    }
-
     logVideoAccess({
       ip,
       resource,
       authorized: false,
-      reason: `Token de sesión inválido: ${reason}`,
+      reason: `Token de sesi?n inv?lido: ${reason}`,
       origin,
       referer,
       tokenValid: false,
@@ -169,7 +162,7 @@ export const requireSessionToken = (req, res, next) => {
 
     return res.status(401).json({
       success: false,
-      message: 'Sesión inválida o expirada. Recarga la aplicación.',
+      message: 'Sesi?n inv?lida o expirada. Recarga la aplicaci?n.',
       code: 'SESSION_INVALID',
     })
   }

@@ -269,7 +269,13 @@ export const deleteFile = async (req, res, next) => {
     const { fileKey } = req.body
     if (!fileKey) return next(createError(400, 'fileKey requerido'))
 
-    if (!fileKey.includes(String(userId))) {
+    const userPrefix = String(userId)
+    const allowedPrefixes = [
+      `uploads/${userPrefix}/`,
+      `raw/${userPrefix}/`,
+      `thumbnails/${userPrefix}/`,
+    ]
+    if (!allowedPrefixes.some((prefix) => fileKey.startsWith(prefix))) {
       return next(createError(403, 'No tienes permiso para eliminar este archivo'))
     }
 

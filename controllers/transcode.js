@@ -194,11 +194,16 @@ export const getTranscodeStatus = async (req, res, next) => {
     const { videoId } = req.params
 
     const video = await Video.findById(videoId).select(
-      'status hlsMasterUrl qualities duration transcodeJobId transcodeError transcodedAt'
+      'status hlsMasterUrl qualities duration transcodeJobId transcodeError transcodedAt userId'
     )
 
     if (!video) {
       return next(createError(404, 'Video no encontrado'))
+    }
+
+    const userId = req.user?.id || req.user?._id
+    if (String(video.userId) !== String(userId)) {
+      return next(createError(403, 'No tienes permiso para consultar este video'))
     }
 
     // Si hay un jobId, consultar BullMQ (detecta mismo Redis entre API y worker remoto).

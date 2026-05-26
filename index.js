@@ -15,10 +15,13 @@ import ogRoute from './routes/oembed.js'
 import panelRoute from './routes/panel.js'
 import cors from 'cors'
 import logger from './config/logger.js'
+import { validateSecretsOnStartup } from './utils/secrets.js'
+
+validateSecretsOnStartup()
 
 const app = express()
 
-mongoose.set('strictQuery', false)
+mongoose.set('strictQuery', true)
 const connect = () => {
     mongoose.connect(process.env.DB_URI).then(() => {
         logger.info('Conectado a MongoDB')
@@ -89,20 +92,25 @@ if (!isProduction) {
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // 1. Permitir peticiones sin origin (como apps móviles o herramientas de postman)
-    if (!origin) return callback(null, true);
-
-    // 2. En desarrollo, permitir todo
-    if (!isProduction) {
-      return callback(null, true);
+    // En producción, rechazar peticiones sin Origin (excepto health checks internos)
+    if (!origin) {
+      if (isProduction) {
+        return callback(null, false)
+      }
+      return callback(null, true)
     }
 
-    // 3. En producción, validar contra el array de .env
+    // En desarrollo, permitir todo
+    if (!isProduction) {
+      return callback(null, true)
+    }
+
+    // En producción, validar contra el array de .env
     if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+      return callback(null, true)
     } else {
-      logger.warn('CORS bloqueado', { origin });
-      return callback(null, false);
+      logger.warn('CORS bloqueado', { origin })
+      return callback(null, false)
     }
   },
   credentials: true, // VITAL: Mantiene la conexión de cookies abierta
@@ -143,7 +151,7 @@ app.use('/api/transcode', transcodeRoute)
 // CRÍTICO para Firefox: hls.js envía el header X-Session-Token en cada request,
 // lo que fuerza un preflight CORS. Sin este handler, el preflight puede pasar
 // al router y ser rechazado por validateOrigin/requireSessionToken.
-app.options('/api/stream/*', cors())
+app.options('/api/stream/*', cors(corsOptions))
 
 // Todas las rutas de /api/stream están protegidas por múltiples capas de seguridad
 app.use('/api/stream', streamRoute)

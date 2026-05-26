@@ -4,6 +4,7 @@ import Video from "../models/Video.js"
 import Playlist from "../models/Playlist.js"
 import mongoose from "mongoose"
 import slugify from "slugify"
+import { escapeRegex } from "../utils/escapeRegex.js"
 
 export const updateUser = async (req, res, next) => {
     if(req.params.id === req.user.id) {
@@ -16,7 +17,7 @@ export const updateUser = async (req, res, next) => {
                 if (currentUser && currentUser.name !== name) {
                     // Verificar si el nuevo nombre ya existe
                     const existingUser = await User.findOne({ 
-                        name: { $regex: new RegExp(`^${name}$`, 'i') },
+                        name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') },
                         _id: { $ne: req.params.id }
                     })
                     

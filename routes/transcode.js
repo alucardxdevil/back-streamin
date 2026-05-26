@@ -11,6 +11,7 @@
 
 import express from 'express'
 import { verifyToken } from '../verifyToken.js'
+import { verifyPanelApiKey } from '../middleware/verifyPanelApiKey.js'
 import {
   generateVideoUploadUrl,
   enqueueTranscode,
@@ -59,7 +60,7 @@ router.get('/status/:videoId', verifyToken, getTranscodeStatus)
  * Estadísticas de la cola (waiting, active, completed, failed).
  * Útil para monitoreo y dashboard de administración.
  */
-router.get('/queue-stats', verifyToken, getQueueStatistics)
+router.get('/queue-stats', verifyPanelApiKey, getQueueStatistics)
 
 /**
  * POST /api/transcode/retry/:videoId

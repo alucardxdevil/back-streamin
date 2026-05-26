@@ -208,12 +208,21 @@ export const proxyVideoMaster = async (req, res, next) => {
 
   try {
     // Buscar el video en la base de datos
-    const video = await Video.findById(videoId).select('hlsMasterUrl hlsBaseKey status videoUrl videoKey')
+    const video = await Video.findById(videoId).select('hlsMasterUrl hlsBaseKey status videoUrl videoKey visibility userId')
 
     if (!video) {
       logVideoAccess({
         ip, resource: videoId, authorized: false,
         reason: 'Video no encontrado', origin, referer,
+        tokenValid: req.sessionValid || false, sessionId, userAgent, statusCode: 404,
+      })
+      return res.status(404).json({ success: false, message: 'Video no encontrado' })
+    }
+
+    if (video.visibility === 'hidden') {
+      logVideoAccess({
+        ip, resource: videoId, authorized: false,
+        reason: 'Video oculto por moderación', origin, referer,
         tokenValid: req.sessionValid || false, sessionId, userAgent, statusCode: 404,
       })
       return res.status(404).json({ success: false, message: 'Video no encontrado' })
@@ -383,6 +392,26 @@ export const proxyHLSSegment = async (req, res, next) => {
       tokenValid: req.sessionValid || false, sessionId, userAgent, statusCode: 400,
     })
     return res.status(400).json({ success: false, message: 'Recurso inválido' })
+  }
+
+  // Vincular el key al videoId solicitado (prevenir acceso a archivos de otros videos)
+  if (videoId) {
+    const expectedPrefix = `hls/${videoId}/`
+    if (!fileKey.startsWith(expectedPrefix)) {
+      logVideoAccess({
+        ip, resource: fileKey, authorized: false,
+        reason: `Key no pertenece al video ${videoId}`, origin, referer,
+        tokenValid: req.sessionValid || false, sessionId, userAgent, statusCode: 403,
+      })
+      return res.status(403).json({ success: false, message: 'Acceso denegado' })
+    }
+
+    const video = await Video.findById(videoId).select('visibility').lean()
+    if (!video || video.visibility === 'hidden') {
+      return res.status(404).json({ success: false, message: 'Video no encontrado' })
+    }
+  } else if (fileKey.startsWith('hls/')) {
+    return res.status(400).json({ success: false, message: 'Parámetro vid requerido para recursos HLS' })
   }
 
   try {

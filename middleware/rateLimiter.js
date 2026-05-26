@@ -64,7 +64,12 @@ const rateLimitHandler = (req, res, next, options) => {
  */
 const createLimiter = (options) => {
   if (!rateLimit) return noopMiddleware
-  if (process.env.DISABLE_RATE_LIMIT === 'true') return noopMiddleware
+  if (process.env.DISABLE_RATE_LIMIT === 'true') {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('[RateLimiter] DISABLE_RATE_LIMIT no debe usarse en producción')
+    }
+    return noopMiddleware
+  }
 
   return rateLimit({
     ...options,
@@ -111,4 +116,16 @@ export const videoMetaRateLimiter = createLimiter({
   max: parseInt(process.env.VIDEO_META_RATE_MAX) || 200,
 })
 
-export default { streamRateLimiter, sessionRateLimiter, videoMetaRateLimiter }
+/**
+ * Rate limiter para endpoints de autenticación.
+ * Previene fuerza bruta en login, registro y recuperación de contraseña.
+ *
+ * Límite: 10 solicitudes por IP cada 15 minutos.
+ */
+export const authRateLimiter = createLimiter({
+  windowMs: parseInt(process.env.AUTH_RATE_WINDOW_MS) || 15 * 60 * 1000,
+  max: parseInt(process.env.AUTH_RATE_MAX) || 10,
+  skipSuccessfulRequests: true,
+})
+
+export default { streamRateLimiter, sessionRateLimiter, videoMetaRateLimiter, authRateLimiter }

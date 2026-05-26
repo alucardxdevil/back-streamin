@@ -2,9 +2,12 @@ import { createError } from "../err.js"
 import Video from "../models/Video.js"
 import User from "../models/User.js"
 import { publicVideoVisibilityFilter } from "../utils/videoVisibility.js"
+import { pickAllowedFields, VIDEO_CREATE_FIELDS, VIDEO_UPDATE_FIELDS } from "../utils/videoFields.js"
+import { escapeRegex } from "../utils/escapeRegex.js"
 
 export const addVideo = async (req, res, next) => {
-    const newVideo = new Video({userId: req.user.id, ...req.body})
+    const safeBody = pickAllowedFields(req.body, VIDEO_CREATE_FIELDS)
+    const newVideo = new Video({ userId: req.user.id, ...safeBody })
     try {
         // Verificar que el usuario no ha sido eliminado
         const user = await User.findById(req.user.id).select('isDeleted').lean()
@@ -24,8 +27,9 @@ export const updateVideo = async (req, res, next) => {
         const video = await Video.findById(req.params.id)
         if(!video) return next(createError(404, 'Video not found'))
         if(req.user.id === video.userId) {
+            const safeUpdate = pickAllowedFields(req.body, VIDEO_UPDATE_FIELDS)
             const updatedVideo = await Video.findByIdAndUpdate(req.params.id, {
-                $set: req.body
+                $set: safeUpdate
             },
             {new: true}
             )
@@ -181,9 +185,13 @@ export const getByTag = async (req, res, next) => {
 
 export const search = async (req, res, next) => {
     const query  = req.query.q
+    if (!query || typeof query !== 'string' || !query.trim()) {
+        return res.status(200).json([])
+    }
     try {
+        const escaped = escapeRegex(query.trim())
         const videos = await Video.find({
-            title: { $regex: query, $options: 'i' },
+            title: { $regex: escaped, $options: 'i' },
             ...publicVideoVisibilityFilter(),
         }).limit(40)
         res.status(200).json(videos)

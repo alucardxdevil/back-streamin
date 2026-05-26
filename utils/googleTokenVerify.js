@@ -24,6 +24,15 @@ export async function verifyGoogleIdToken(idToken) {
 
     const payload = await response.json()
 
+    if (!payload.sub) {
+      return null
+    }
+
+    if (process.env.NODE_ENV === 'production' && !GOOGLE_CLIENT_ID) {
+      logger.error('GOOGLE_CLIENT_ID requerido en producción para verificar tokens de Google')
+      return null
+    }
+
     if (GOOGLE_CLIENT_ID && payload.aud !== GOOGLE_CLIENT_ID) {
       logger.warn('Google idToken audience mismatch', {
         expected: GOOGLE_CLIENT_ID,
