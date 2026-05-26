@@ -59,7 +59,13 @@ export function validateSecretsOnStartup() {
   getJwtSecret()
   getSessionSecret()
 
-  if (process.env.NODE_ENV === 'production' && !process.env.GOOGLE_CLIENT_ID) {
-    console.warn('[Security] GOOGLE_CLIENT_ID no configurado — la verificación de Google OAuth estará deshabilitada')
+  if (
+    process.env.NODE_ENV === 'production' &&
+    !process.env.GOOGLE_CLIENT_ID &&
+    !process.env.FIREBASE_PROJECT_ID
+  ) {
+    console.warn(
+      '[Security] FIREBASE_PROJECT_ID no configurado — login con Google (Firebase Auth) fallará en producción'
+    )
   }
 }
