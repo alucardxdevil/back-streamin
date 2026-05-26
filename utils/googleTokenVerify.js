@@ -1,8 +1,15 @@
+import jwt from 'jsonwebtoken'
+import jwksClient from 'jwks-rsa'
 import fetch from 'node-fetch'
 import logger from '../config/logger.js'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ''
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || ''
+
+const FIREBASE_JWKS_URI =
+  'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
+
+let firebaseJwks = null
 
 function getAllowedAudiences() {
   const extra = (process.env.GOOGLE_ALLOWED_AUDIENCES || '')
@@ -17,30 +24,75 @@ function isFirebaseIssuer(issuer) {
   return typeof issuer === 'string' && issuer.startsWith('https://securetoken.google.com/')
 }
 
-function issuerMatchesProject(issuer) {
-  if (!isFirebaseIssuer(issuer)) return true
-  if (!FIREBASE_PROJECT_ID) return true
-  const projectFromIss = issuer.replace('https://securetoken.google.com/', '')
-  return projectFromIss === FIREBASE_PROJECT_ID
+function getFirebaseJwksClient() {
+  if (!firebaseJwks) {
+    firebaseJwks = jwksClient({
+      jwksUri: FIREBASE_JWKS_URI,
+      cache: true,
+      cacheMaxAge: 60 * 60 * 1000,
+      rateLimit: true,
+      jwksRequestsPerMinute: 10,
+    })
+  }
+  return firebaseJwks
 }
 
-/**
- * Verifies a Firebase / Google ID token.
- * Frontend uses Firebase Auth → aud is typically FIREBASE_PROJECT_ID, not GOOGLE_CLIENT_ID.
- */
-export async function verifyGoogleIdToken(idToken) {
-  if (!idToken || typeof idToken !== 'string') {
+function getFirebaseSigningKey(kid) {
+  return new Promise((resolve, reject) => {
+    getFirebaseJwksClient().getSigningKey(kid, (err, key) => {
+      if (err) return reject(err)
+      resolve(key.getPublicKey())
+    })
+  })
+}
+
+function decodeJwtPart(part) {
+  return JSON.parse(Buffer.from(part, 'base64url').toString('utf8'))
+}
+
+function normalizeProfile(payload) {
+  return {
+    googleId: payload.sub,
+    email: (payload.email || '').toLowerCase(),
+    name: payload.name || payload.given_name || '',
+    img: payload.picture || '',
+    emailVerified: payload.email_verified === true || payload.email_verified === 'true',
+  }
+}
+
+async function verifyFirebaseIdToken(idToken) {
+  if (!FIREBASE_PROJECT_ID) {
+    logger.error('FIREBASE_PROJECT_ID requerido para verificar tokens de Firebase Auth')
     return null
   }
 
+  try {
+    const header = decodeJwtPart(idToken.split('.')[0])
+    if (!header.kid) {
+      logger.warn('Firebase idToken sin kid en header')
+      return null
+    }
+
+    const publicKey = await getFirebaseSigningKey(header.kid)
+    const payload = jwt.verify(idToken, publicKey, {
+      algorithms: ['RS256'],
+      audience: FIREBASE_PROJECT_ID,
+      issuer: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+    })
+
+    return normalizeProfile(payload)
+  } catch (error) {
+    logger.warn('Firebase idToken JWT verify failed', {
+      message: error.message,
+      projectId: FIREBASE_PROJECT_ID,
+    })
+    return null
+  }
+}
+
+/** Fallback para tokens OAuth de Google (no Firebase) — p.ej. app móvil directa */
+async function verifyGoogleOAuthIdToken(idToken) {
   const allowedAudiences = getAllowedAudiences()
-
-  if (process.env.NODE_ENV === 'production' && allowedAudiences.length === 0) {
-    logger.error(
-      'FIREBASE_PROJECT_ID o GOOGLE_CLIENT_ID requerido en producción para verificar login con Google'
-    )
-    return null
-  }
 
   try {
     const response = await fetch(
@@ -49,7 +101,7 @@ export async function verifyGoogleIdToken(idToken) {
 
     if (!response.ok) {
       const body = await response.text().catch(() => '')
-      logger.warn('Google idToken verification failed', {
+      logger.warn('Google OAuth idToken tokeninfo failed', {
         status: response.status,
         body: body.slice(0, 200),
       })
@@ -58,37 +110,56 @@ export async function verifyGoogleIdToken(idToken) {
 
     const payload = await response.json()
 
-    if (!payload.sub) {
-      logger.warn('Google idToken missing sub claim')
-      return null
-    }
+    if (!payload.sub) return null
 
     if (allowedAudiences.length > 0 && !allowedAudiences.includes(payload.aud)) {
-      logger.warn('Google idToken audience mismatch', {
+      logger.warn('Google OAuth idToken audience mismatch', {
         allowedAudiences,
         received: payload.aud,
-        hint: 'Con Firebase Auth, aud suele ser FIREBASE_PROJECT_ID (no el OAuth client ID)',
       })
       return null
     }
 
-    if (!issuerMatchesProject(payload.iss)) {
-      logger.warn('Firebase issuer mismatch', {
-        expectedProject: FIREBASE_PROJECT_ID,
-        receivedIssuer: payload.iss,
-      })
-      return null
-    }
-
-    return {
-      googleId: payload.sub,
-      email: (payload.email || '').toLowerCase(),
-      name: payload.name || payload.given_name || '',
-      img: payload.picture || '',
-      emailVerified: payload.email_verified === 'true' || payload.email_verified === true,
-    }
+    return normalizeProfile(payload)
   } catch (error) {
-    logger.error('Google idToken verification error', { message: error.message })
+    logger.error('Google OAuth idToken verification error', { message: error.message })
     return null
   }
+}
+
+/**
+ * Verifica idToken de Firebase Auth (web) u OAuth de Google (fallback).
+ * Firebase tokens NO funcionan con oauth2/tokeninfo — usan JWKS de securetoken.
+ */
+export async function verifyGoogleIdToken(idToken) {
+  if (!idToken || typeof idToken !== 'string') {
+    return null
+  }
+
+  const token = idToken.trim()
+  const parts = token.split('.')
+
+  if (parts.length !== 3) {
+    logger.warn('idToken no tiene formato JWT', { segments: parts.length, length: token.length })
+    return null
+  }
+
+  if (process.env.NODE_ENV === 'production' && !FIREBASE_PROJECT_ID && !GOOGLE_CLIENT_ID) {
+    logger.error('FIREBASE_PROJECT_ID o GOOGLE_CLIENT_ID requerido en producción')
+    return null
+  }
+
+  let unsafePayload
+  try {
+    unsafePayload = decodeJwtPart(parts[1])
+  } catch {
+    logger.warn('idToken payload ilegible', { length: token.length })
+    return null
+  }
+
+  if (isFirebaseIssuer(unsafePayload.iss)) {
+    return verifyFirebaseIdToken(token)
+  }
+
+  return verifyGoogleOAuthIdToken(token)
 }

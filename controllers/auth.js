@@ -120,6 +120,9 @@ export const googleAuth = async (req, res, next) => {
 
         const verified = await verifyGoogleIdToken(req.body.idToken)
         if (!verified) {
+            logger.warn('Google auth rejected', {
+                tokenLength: typeof req.body.idToken === 'string' ? req.body.idToken.length : 0,
+            })
             return next(createError(401, 'Invalid Google token. Please try again.'))
         }
 
