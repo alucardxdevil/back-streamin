@@ -4,6 +4,7 @@ import { createError } from "../err.js"
 import jwt from 'jsonwebtoken'
 import { getAccessTokenCookieOptions } from "../utils/cookieOptions.js"
 import { userPayloadWithAccessToken } from "../utils/authResponse.js"
+import { setCsrfToken, clearCsrfToken } from "../middleware/csrfProtection.js"
 import { validatePassword } from "../middleware/validateAuth.js"
 import { verifyGoogleIdToken } from "../utils/googleTokenVerify.js"
 import { handleMongoDuplicateError } from "../utils/authErrors.js"
@@ -25,10 +26,11 @@ function hashPasswordResetToken(rawToken) {
 
 function issueAuthResponse(res, userDoc, token) {
     const cookieOpts = getAccessTokenCookieOptions()
+    const csrfToken = setCsrfToken(res)
     return res
         .cookie('access_token', token, cookieOpts)
         .status(200)
-        .json(userPayloadWithAccessToken(userDoc, token))
+        .json({ ...userPayloadWithAccessToken(userDoc, token), csrfToken })
 }
 
 function escapeHtml(str) {
@@ -186,7 +188,9 @@ export const logoutHandler = async (req, res) => {
         res.cookie('access_token', '', {
             ...getAccessTokenCookieOptions(),
             maxAge: 0,
-        }).status(200).json({ success: true, message: 'Logout successful' })
+        })
+        clearCsrfToken(res)
+        res.status(200).json({ success: true, message: 'Logout successful' })
     } catch (error) {
         console.error("Error during logout:", error)
         res.status(500).json({ success: false, message: 'Internal Server Error' })

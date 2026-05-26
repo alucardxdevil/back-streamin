@@ -15,8 +15,12 @@ import {
     validateSignupBody,
 } from "../middleware/validateAuth.js";
 import { authRateLimiter } from "../middleware/rateLimiter.js";
+import { issueCsrfToken } from "../middleware/csrfProtection.js";
 
 const router = express.Router()
+
+// Token CSRF (debe llamarse antes de cualquier mutación desde el SPA)
+router.get('/csrf', issueCsrfToken)
 
 // Email/password registration
 router.post('/signup', authRateLimiter, validateSignupBody, signup)

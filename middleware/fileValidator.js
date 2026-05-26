@@ -1,25 +1,28 @@
 /**
  * Middleware de Validación de Archivos — stream-in
- * 
+ *
  * Capa de protección: VALIDACIÓN DE ARCHIVOS (Capa 7)
  * Amenaza cubierta: Upload de archivos maliciosos, MIME spoofing, extensión fake
- * 
+ *
  * Proporciona validación robusta de:
  * - Tipo MIME real (usando file-type library)
  * - Extensión de archivo
  * - Magic numbers (magic bytes)
  */
 
-import { createRequire } from 'module'
+import { createError } from '../err.js'
 
-const require = createRequire(import.meta.url)
+let fileTypeFromBufferFn = null
 
-// Intentar cargar file-type
-let FileType = null
-try {
-  FileType = require('file-type')
-} catch {
-  console.warn('[FileValidator] file-type no disponible. Instalar: npm install file-type')
+async function loadFileTypeFromBuffer() {
+  if (fileTypeFromBufferFn) return fileTypeFromBufferFn
+  try {
+    const mod = await import('file-type')
+    fileTypeFromBufferFn = mod.fileTypeFromBuffer
+  } catch {
+    console.warn('[FileValidator] file-type no disponible. Instalar: npm install file-type')
+  }
+  return fileTypeFromBufferFn
 }
 
 // Tipos MIME permitidos
@@ -106,13 +109,13 @@ const verifyMagicNumber = (buffer, declaredMimeType) => {
  * Obtiene el tipo real del archivo basándose en su contenido
  */
 const detectRealFileType = async (buffer) => {
-  if (!FileType) {
-    console.warn('[FileValidator] file-type no disponible, usando fallback')
+  const fileTypeFromBuffer = await loadFileTypeFromBuffer()
+  if (!fileTypeFromBuffer) {
     return null
   }
-  
+
   try {
-    const result = await FileType.fromBuffer(buffer)
+    const result = await fileTypeFromBuffer(buffer)
     return result ? result.mime : null
   } catch {
     return null
@@ -213,8 +216,6 @@ export const validatePresignedBody = (req, res, next) => {
   
   next()
 }
-
-import { createError } from "../err.js"
 
 export default {
   validateFile,

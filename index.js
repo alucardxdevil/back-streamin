@@ -16,6 +16,8 @@ import panelRoute from './routes/panel.js'
 import cors from 'cors'
 import logger from './config/logger.js'
 import { validateSecretsOnStartup } from './utils/secrets.js'
+import { getAllowedOrigins } from './config/allowedOrigins.js'
+import { csrfProtection } from './middleware/csrfProtection.js'
 
 validateSecretsOnStartup()
 
@@ -59,36 +61,8 @@ const helmetConfig = {
 app.use(helmet(helmetConfig))
 
 // ── Configuración de CORS ──────────────────────────────────────────────────────
-// Permite solicitudes desde los dominios autorizados de la aplicación
 const isProduction = process.env.NODE_ENV === 'production'
-
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean)
-
-// Producción: dominios del frontend (evita CORS si ALLOWED_ORIGINS no se configuró en el servidor)
-if (isProduction) {
-  const defaultProdOrigins = [
-    'https://stream-in.com',
-    'https://www.stream-in.com',
-  ]
-  for (const o of defaultProdOrigins) {
-    if (!allowedOrigins.includes(o)) allowedOrigins.push(o)
-  }
-}
-
-// En desarrollo, agregar localhost por defecto
-if (!isProduction) {
-  allowedOrigins.push(
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:5000',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-    'http://127.0.0.1:5000'
-  )
-}
+const allowedOrigins = getAllowedOrigins()
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -115,7 +89,15 @@ const corsOptions = {
   },
   credentials: true, // VITAL: Mantiene la conexión de cookies abierta
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Token', 'Range', 'X-Stream-Panel-Key'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Session-Token',
+    'X-CSRF-Token',
+    'X-Requested-With',
+    'Range',
+    'X-Stream-Panel-Key',
+  ],
   exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length'],
   // Cachear respuestas preflight (OPTIONS) por 1 hora.
   // CRÍTICO para Firefox: sin esto, Firefox envía un preflight para CADA request
@@ -132,6 +114,9 @@ app.use(cors(corsOptions))
 app.use(cookieParser())
 app.use(express.json({ limit: '100kb' })) // Limitar tamaño del body para prevenir DoS
 app.use(express.urlencoded({ extended: true, limit: '100kb' }))
+
+// Protección CSRF en mutaciones (POST/PUT/DELETE) — excluye stream, panel, móvil Bearer-only
+app.use(csrfProtection)
 
 // Confiar en el primer proxy (para obtener IP real con X-Forwarded-For)
 // Necesario para rate limiting correcto detrás de Nginx/Cloudflare
