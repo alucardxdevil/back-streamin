@@ -1,19 +1,19 @@
 /**
- * Sistema de Tokens de Sesi?n An?nimos ÿÿÿ stream-in
+ * Sistema de Tokens de Sesi?n An?nimos  stream-in
  *
- * Capa de protecci?n: SESIÿÿN ANÿÿNIMA (Capa 3)
+ * Capa de protecci?n: SESIN ANNIMA (Capa 3)
  * Amenaza cubierta: Solicitudes realizadas fuera del contexto de la aplicaci?n.
  *   Un atacante que copie una URL de video no tendr? un token de sesi?n v?lido
  *   emitido por el servidor, por lo que su solicitud ser? rechazada.
  *
  * Flujo:
- *  1. El cliente carga la aplicaci?n ÿÿÿ GET /api/stream/session
+ *  1. El cliente carga la aplicaci?n  GET /api/stream/session
  *  2. El servidor emite un JWT firmado con vida corta (30 min)
  *  3. El frontend almacena el token en memoria (no en localStorage)
  *  4. Cada solicitud de video incluye el token en el header X-Session-Token
  *  5. El middleware verifica el token antes de procesar la solicitud
  *
- * El token NO contiene informaci?n de usuario ÿÿÿ solo un ID de sesi?n aleatorio
+ * El token NO contiene informaci?n de usuario  solo un ID de sesi?n aleatorio
  * y metadatos de emisi?n. Su prop?sito es demostrar que la solicitud proviene
  * de una sesi?n iniciada dentro de la aplicaci?n.
  */
@@ -22,6 +22,10 @@ import jwt from 'jsonwebtoken'
 import { v4 as uuidv4 } from 'uuid'
 import { logVideoAccess, logSessionIssued } from '../config/logger.js'
 import { getSessionSecret } from '../utils/secrets.js'
+import {
+  getStreamSessionCookieOptions,
+  STREAM_SESSION_COOKIE_NAME,
+} from '../utils/cookieOptions.js'
 
 // Duraci?n del token de sesi?n an?nimo (30 minutos)
 const SESSION_TOKEN_TTL = parseInt(process.env.SESSION_TOKEN_TTL_SECONDS) || 1800
@@ -107,12 +111,24 @@ export const issueSessionToken = (req, res) => {
 
   logSessionIssued({ ip, sessionId: sessionId.substring(0, 8), userAgent })
 
+  // Emitir la cookie cross-domain `stream_session` (Domain=.stream-in.com).
+  // El navegador la enviar automticamente en cada peticin a api.stream-in.com
+  // que tenga withCredentials=true. Esto reemplaza al query param `_st` en las
+  // URLs de fragmentos HLS, lo que permite que Cloudflare comparta el cache
+  // entre todos los usuarios que ven el mismo video (sin necesidad de configurar
+  // cache keys custom, que son plan Enterprise).
+  res.cookie(
+    STREAM_SESSION_COOKIE_NAME,
+    token,
+    getStreamSessionCookieOptions(expiresIn),
+  )
+
   return res.status(200).json({
     success: true,
     data: {
       sessionToken: token,
       expiresIn,
-      // Indicar al cliente cu?ndo renovar (5 minutos antes de expirar)
+      // Indicar al cliente cundo renovar (5 minutos antes de expirar)
       renewBefore: expiresIn - 300,
     },
   })

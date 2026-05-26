@@ -25,3 +25,45 @@ export function getAccessTokenCookieOptions() {
     path: '/',
   };
 }
+
+/**
+ * Opciones de cookie para el token de sesión de streaming anónimo.
+ *
+ * Esta cookie reemplaza al query param `_st=<jwt>` en las URLs de
+ * fragmentos HLS. Al usar cookie en lugar de query param, todos los
+ * usuarios consumen la MISMA URL para el mismo segmento, lo que permite
+ * a Cloudflare reutilizar el cache entre viewers sin necesidad de
+ * configurar cache keys custom (que requieren plan Enterprise).
+ *
+ * Requisitos para compartir cross-origin entre stream-in.com y
+ * api.stream-in.com:
+ *   - SameSite=None (cookie cross-site)
+ *   - Secure=true   (obligatorio cuando SameSite=None)
+ *   - Domain=.stream-in.com (compartida entre apex y subdominios)
+ *   - HttpOnly      (no leíble por JS — defensa contra XSS)
+ *
+ * @param {number} ttlSeconds - TTL del JWT (para alinear cookie maxAge)
+ */
+export function getStreamSessionCookieOptions(ttlSeconds) {
+  const maxAge = Math.max(60, Number(ttlSeconds) || 1800) * 1000;
+  if (!isProd) {
+    return {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge,
+      path: '/',
+    };
+  }
+  const domain = process.env.COOKIE_DOMAIN || '.stream-in.com';
+  return {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    domain: domain || undefined,
+    maxAge,
+    path: '/',
+  };
+}
+
+export const STREAM_SESSION_COOKIE_NAME = 'stream_session';

@@ -101,13 +101,20 @@ const extractB2Key = (url) => {
  * Reescribe un archivo .m3u8 reemplazando todas las URLs con URLs del proxy.
  * Maneja tanto URLs absolutas como rutas relativas.
  *
+ * IMPORTANTE: ya NO incluimos `_st` (token de sesin) en las URLs reescritas.
+ * El token viaja como cookie HttpOnly `stream_session` (Domain=.stream-in.com)
+ * y se enva automticamente por el navegador en cada peticin con
+ * withCredentials=true. Esto garantiza que todos los usuarios consuman la
+ * MISMA URL para el mismo segmento, lo que permite a Cloudflare reutilizar
+ * el cache entre viewers en el plan Free (sin custom cache keys).
+ *
  * @param {string} content - Contenido del .m3u8
  * @param {string} baseProxyUrl - URL base del proxy
  * @param {string} videoId - ID del video
  * @param {string} hlsBaseKey - Prefijo base en B2 (ej: "hls/videoId/")
  * @returns {string}
  */
-const rewriteM3U8WithBase = (content, baseProxyUrl, videoId, hlsBaseKey, sessionToken) => {
+const rewriteM3U8WithBase = (content, baseProxyUrl, videoId, hlsBaseKey) => {
   const lines = content.split('\n')
   const baseKey = hlsBaseKey ? hlsBaseKey.replace(/\/$/, '') : null
 
@@ -128,14 +135,7 @@ const rewriteM3U8WithBase = (content, baseProxyUrl, videoId, hlsBaseKey, session
 
     if (key) {
       const vidParam = videoId ? `&vid=${videoId}` : ''
-      // Incluir _st como query param en TODOS los recursos (.ts y .m3u8).
-      // Esto evita que hls.js envíe el header X-Session-Token,
-      // que fuerza un preflight CORS en Firefox para cada petición.
-      // Sin el _st en los playlists de calidad (.m3u8), Firefox requiere
-      // preflight para cada playlist, retrasando la resolución de calidad
-      // y causando que la reproducción no inicie desde el segundo 0.
-      const stParam = sessionToken ? `&_st=${sessionToken}` : ''
-      return `${baseProxyUrl}?key=${encodeURIComponent(key)}${vidParam}${stParam}`
+      return `${baseProxyUrl}?key=${encodeURIComponent(key)}${vidParam}`
     }
 
     return line
@@ -306,11 +306,12 @@ export const proxyVideoMaster = async (req, res, next) => {
     })
 
     if (isM3U8) {
-      // Para archivos .m3u8: leer, reescribir URLs, y enviar
+      // Para archivos .m3u8: leer, reescribir URLs, y enviar.
+      // El token de sesin viaja por cookie, NO por URL: as la URL es
+      // compartida entre todos los usuarios y Cloudflare puede cachear.
       const m3u8Content = await b2Response.text()
       const baseProxyUrl = `${req.protocol}://${req.get('host')}/api/stream/hls`
-      const sessionToken = req.headers['x-session-token'] || req.query?._st || null
-      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, video.hlsBaseKey, sessionToken)
+      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, video.hlsBaseKey)
 
       // master.m3u8: solo es inmutable cuando el video está listo (status='ready').
       // En 'processing' las URLs internas pueden cambiar, así que no cacheamos.
@@ -453,11 +454,10 @@ export const proxyHLSSegment = async (req, res, next) => {
     const isM3U8 = fileKey.endsWith('.m3u8') || contentType.includes('mpegurl')
 
     if (isM3U8) {
-      // Reescribir el playlist de calidad
+      // Reescribir el playlist de calidad. Sin `_st`: el token va por cookie.
       const m3u8Content = await b2Response.text()
       const baseProxyUrl = `${req.protocol}://${req.get('host')}/api/stream/hls`
-      const sessionToken = req.headers['x-session-token'] || req.query?._st || null
-      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, getBaseKey(fileKey), sessionToken)
+      const rewritten = rewriteM3U8WithBase(m3u8Content, baseProxyUrl, videoId, getBaseKey(fileKey))
 
       res.set({
         'Content-Type': 'application/vnd.apple.mpegurl',
