@@ -1,6 +1,7 @@
 import express from 'express';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
+import { getPublicProfilePath, normalizeProfileSlug } from '../utils/profilePaths.js';
 
 const router = express.Router();
 
@@ -53,8 +54,8 @@ router.get('/video/:id', async (req, res) => {
     const pageUrl = `${SITE_URL}/video/${video._id}`;
     const embedUrl = escapeHtml(video.hlsMasterUrl || video.videoUrl || '');
     const channelName = escapeHtml(channel?.name || 'Creator');
-    const channelUrl = channel?.slug
-      ? `${SITE_URL}/profileUser/${escapeHtml(channel.slug)}`
+    const channelUrl = channel?.slug || channel?._id
+      ? getPublicProfilePath(channel, { absolute: true, siteUrl: SITE_URL })
       : `${SITE_URL}`;
     const uploadDate = video.createdAt
       ? new Date(video.createdAt).toISOString()
@@ -155,13 +156,14 @@ router.get('/video/:id', async (req, res) => {
  */
 router.get('/profile/:slug', async (req, res) => {
   try {
+    const slugParam = normalizeProfileSlug(req.params.slug);
     // Buscar por slug primero, luego por _id
-    let user = await User.findOne({ slug: req.params.slug })
+    let user = await User.findOne({ slug: slugParam })
       .select('name slug img imgBanner descriptionAccount follows')
       .lean();
 
     if (!user) {
-      user = await User.findById(req.params.slug)
+      user = await User.findById(slugParam)
         .select('name slug img imgBanner descriptionAccount follows')
         .lean();
     }
@@ -176,7 +178,7 @@ router.get('/profile/:slug', async (req, res) => {
         .substring(0, 200)
     );
     const profileImage = escapeHtml(user.img || `${SITE_URL}/logo-pest.png`);
-    const profileUrl = `${SITE_URL}/profileUser/${escapeHtml(user.slug || user._id)}`;
+    const profileUrl = getPublicProfilePath(user, { absolute: true, siteUrl: SITE_URL });
 
     // JSON-LD Person
     const jsonLd = {

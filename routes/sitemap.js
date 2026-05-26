@@ -1,6 +1,7 @@
 import express from 'express';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
+import { getPublicProfilePath } from '../utils/profilePaths.js';
 
 const router = express.Router();
 
@@ -102,7 +103,7 @@ router.get('/sitemap.xml', async (req, res) => {
         : '';
 
       xml += `  <url>
-    <loc>${SITE_URL}/profileUser/${slug}</loc>
+    <loc>${getPublicProfilePath(slug, { absolute: true, siteUrl: SITE_URL })}</loc>
     ${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
