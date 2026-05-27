@@ -4,6 +4,9 @@
   "description": "stream-in API Server con HLS Streaming",
   "main": "index.js",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",

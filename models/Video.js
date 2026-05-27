@@ -182,11 +182,12 @@ const VideoSchema = new mongoose.Schema({
 })
 
 // ─── Índices para rendimiento ─────────────────────────────────────────────────
+// NOTA: `status` y `visibility` ya tienen `index: true` inline en la definición
+// del schema, NO duplicarlos aquí (Mongoose emite warning si lo hacemos).
 VideoSchema.index({ userId: 1 })
 VideoSchema.index({ views: -1 })
 VideoSchema.index({ createdAt: -1 })
 VideoSchema.index({ tags: 1 })
-VideoSchema.index({ status: 1 })                    // Para consultas de estado
 VideoSchema.index({ transcodeJobId: 1 }, { sparse: true }) // Para lookup por jobId
 
 export default mongoose.model('Video', VideoSchema)
