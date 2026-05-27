@@ -255,18 +255,44 @@ export const proxyVideoMaster = async (req, res, next) => {
       })
     }
 
-    // Determinar el key del archivo a servir
-    // Priorizar HLS si está disponible y listo, sino usar video directo
+    // Determinar el key del archivo a servir.
+    // Priorizar HLS si est disponible y listo, sino usar video directo.
+    //
+    // ROBUSTEZ: para HLS preferimos construir el key directamente desde
+    // `video.hlsBaseKey` (campo guardado en Mongo por el worker, formato
+    // "hls/{videoId}/"). Esto funciona independientemente de cmo est
+    // configurado HLS_BASE_URL en el .env del worker, mientras que
+    // extractB2Key() asume el formato "https://hostname/file/{bucket}/{key}"
+    // y devuelve null si la URL pblica apunta a un CDN custom o cambi de
+    // formato (causaba 500 "Key de archivo no encontrado" en uploads recientes).
     let fileKey = null
 
     if (hasHLS) {
-      fileKey = extractB2Key(video.hlsMasterUrl)
+      if (video.hlsBaseKey) {
+        const baseKey = video.hlsBaseKey.endsWith('/')
+          ? video.hlsBaseKey
+          : `${video.hlsBaseKey}/`
+        fileKey = `${baseKey}master.m3u8`
+      } else {
+        // Fallback: parsear la URL pblica.
+        fileKey = extractB2Key(video.hlsMasterUrl)
+      }
     } else if (video.videoKey) {
       // Video directo en B2 (legacy o fallback mientras se transcodifica)
       fileKey = video.videoKey
     }
 
     if (!fileKey) {
+      // Loguear el detalle exacto para diagnosticar configuraciones rotas.
+      console.error('[StreamProxy] fileKey nulo', {
+        videoId,
+        status: video.status,
+        hasHLS,
+        hasDirectVideo,
+        hlsMasterUrl: video.hlsMasterUrl || null,
+        hlsBaseKey: video.hlsBaseKey || null,
+        videoKey: video.videoKey || null,
+      })
       logVideoAccess({
         ip, resource: videoId, authorized: false,
         reason: 'Key de archivo no encontrado', origin, referer,
