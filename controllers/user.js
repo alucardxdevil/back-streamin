@@ -88,13 +88,23 @@ export const getUser = async (req, res, next) => {
     try {
         const { slug } = req.params;
         
+        // Ruta caliente (cada vista de perfil la golpea): .lean() devuelve un
+        // POJO en vez de un Mongoose Document, ~3x más rápido y ~10x menos
+        // memoria. Como ya no es un Document, descartamos los campos sensibles
+        // con un select negativo en vez de toObject().
+        const sensitive = '-password -passwordResetTokenHash -passwordResetExpires'
+
         // Primero intentar buscar por slug
-        let user = await User.findOne({ slug, isDeleted: { $ne: true } });
+        let user = await User.findOne({ slug, isDeleted: { $ne: true } })
+            .select(sensitive)
+            .lean();
         
         // Si no encuentra por slug, intentar por _id (para compatibilidad)
         if (!user) {
             if (mongoose.Types.ObjectId.isValid(slug)) {
-                user = await User.findOne({ _id: slug, isDeleted: { $ne: true } });
+                user = await User.findOne({ _id: slug, isDeleted: { $ne: true } })
+                    .select(sensitive)
+                    .lean();
             }
         }
         
@@ -102,11 +112,7 @@ export const getUser = async (req, res, next) => {
             return res.status(404).json({ message: "Usuario no encontrado" });
         }
         
-        const safe = user.toObject ? user.toObject() : user
-        delete safe.password
-        delete safe.passwordResetTokenHash
-        delete safe.passwordResetExpires
-        res.status(200).json(safe)
+        res.status(200).json(user)
     } catch (err) {
         next(err)
     }
@@ -121,7 +127,7 @@ export const searchUsers = async (req, res, next) => {
         const filter = query
             ? { name: { $regex: new RegExp(escaped, 'i') }, isDeleted: { $ne: true } }
             : { isDeleted: { $ne: true } }
-        const user = await User.find(filter).limit(limit).select('-password')
+        const user = await User.find(filter).limit(limit).select('-password').lean()
         res.status(200).json(user)
     } catch (err) {
         next(err)
@@ -311,7 +317,8 @@ export const getTopFollowedUsers = async (req, res, next) => {
     const users = await User.find({})
       .sort({ follows: -1 })
       .limit(limit)
-      .select('-password -email');
+      .select('-password -email')
+      .lean();
     res.status(200).json(users);
   } catch (err) {
     next(err);
@@ -324,7 +331,7 @@ export const getFollowingUsers = async (req, res, next) => {
     const userId = req.params.id;
     
     // Buscar el usuario para obtener su lista de followsProfile
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).select('followsProfile').lean();
     if (!user) {
       return res.status(404).json({ message: "Usuario no encontrado" });
     }
@@ -338,7 +345,7 @@ export const getFollowingUsers = async (req, res, next) => {
     // Obtener los datos de los usuarios seguidos
     const followingUsers = await User.find({
       _id: { $in: followingIds }
-    }).select('-password -email');
+    }).select('-password -email').lean();
     
     res.status(200).json(followingUsers);
   } catch (err) {

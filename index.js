@@ -2,6 +2,7 @@ import './config/loadEnv.js'
 import express from 'express'
 import mongoose from 'mongoose'
 import cookieParser from 'cookie-parser'
+import compression from 'compression'
 import helmet from 'helmet'
 import userRoute from './routes/users.js'
 import videoRoute from './routes/videos.js'
@@ -18,6 +19,7 @@ import logger from './config/logger.js'
 import { validateSecretsOnStartup } from './utils/secrets.js'
 import { getAllowedOrigins } from './config/allowedOrigins.js'
 import { csrfProtection } from './middleware/csrfProtection.js'
+import { startViewFlusher } from './services/viewCounter.js'
 
 validateSecretsOnStartup()
 
@@ -25,7 +27,18 @@ const app = express()
 
 mongoose.set('strictQuery', true)
 const connect = () => {
-    mongoose.connect(process.env.DB_URI).then(() => {
+    // Opciones de pool y timeouts explícitos:
+    //  - maxPoolSize: límite de conexiones concurrentes al cluster (evita
+    //    agotar conexiones de Atlas bajo carga).
+    //  - serverSelectionTimeoutMS: falla rápido (5s) si el cluster no responde
+    //    en lugar de colgar la request hasta el default de 30s.
+    //  - socketTimeoutMS: corta sockets inactivos/colgados.
+    mongoose.connect(process.env.DB_URI, {
+        maxPoolSize: parseInt(process.env.MONGO_MAX_POOL_SIZE) || 20,
+        minPoolSize: parseInt(process.env.MONGO_MIN_POOL_SIZE) || 2,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+    }).then(() => {
         logger.info('Conectado a MongoDB')
         console.log('Connect to DB')
     })
@@ -59,6 +72,31 @@ const helmetConfig = {
 }
 
 app.use(helmet(helmetConfig))
+
+// Confiar en el primer proxy (Nginx/Cloudflare) para obtener la IP real vía
+// X-Forwarded-For. Debe ir ANTES de cualquier middleware que lea req.ip
+// (rate limiter, logger, validación de origen) para que vean la IP correcta.
+app.set('trust proxy', 1)
+
+// ── Compresión de respuestas ─────────────────────────────────────────────────
+// Comprime JSON/HTML/CSS/JS de la API. Excluimos explícitamente los streams de
+// video (.m3u8 y .ts): ya vienen empaquetados, recomprimirlos gasta CPU sin
+// ganancia y puede romper el pipe del proxy de streaming.
+app.use(compression({
+  filter: (req, res) => {
+    const type = res.getHeader('Content-Type')
+    if (typeof type === 'string') {
+      if (
+        type.includes('mpegurl') ||
+        type.includes('video/') ||
+        type.includes('mp2t')
+      ) {
+        return false
+      }
+    }
+    return compression.filter(req, res)
+  },
+}))
 
 // ── Configuración de CORS ──────────────────────────────────────────────────────
 const isProduction = process.env.NODE_ENV === 'production'
@@ -117,10 +155,6 @@ app.use(express.urlencoded({ extended: true, limit: '100kb' }))
 
 // Protección CSRF en mutaciones (POST/PUT/DELETE) — excluye stream, panel, móvil Bearer-only
 app.use(csrfProtection)
-
-// Confiar en el primer proxy (para obtener IP real con X-Forwarded-For)
-// Necesario para rate limiting correcto detrás de Nginx/Cloudflare
-app.set('trust proxy', 1)
 
 // ── Rutas de la API ────────────────────────────────────────────────────────────
 app.use('/api/panel', panelRoute)
@@ -191,6 +225,8 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT,  () => {
     connect()
+    // Buffer de vistas en Redis → flush periódico a Mongo (F-14 / N-02).
+    startViewFlusher()
     logger.info(`Servidor iniciado en puerto ${PORT}`)
     console.log(`Connected on port ${PORT}`)
 })

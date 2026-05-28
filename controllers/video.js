@@ -4,6 +4,18 @@ import User from "../models/User.js"
 import { publicVideoVisibilityFilter } from "../utils/videoVisibility.js"
 import { pickAllowedFields, VIDEO_CREATE_FIELDS, VIDEO_UPDATE_FIELDS } from "../utils/videoFields.js"
 import { escapeRegex } from "../utils/escapeRegex.js"
+import { recordView, getPendingViews } from "../services/viewCounter.js"
+
+/**
+ * Identificador estable del espectador para deduplicar vistas. Usa la cookie
+ * de sesión de streaming si existe (más preciso que la IP en NAT/CGNAT), y cae
+ * a la IP real (req.ip ya viene correcta gracias a trust proxy).
+ */
+const getViewerId = (req) => {
+  const cookie = req.cookies?.stream_session
+  if (cookie) return `s:${cookie.slice(-24)}`
+  return `ip:${req.ip || req.connection?.remoteAddress || 'unknown'}`
+}
 
 export const addVideo = async (req, res, next) => {
     const safeBody = pickAllowedFields(req.body, VIDEO_CREATE_FIELDS)
@@ -67,6 +79,11 @@ export const getVideo = async (req, res, next) => {
         if (video.visibility === 'hidden') {
             return next(createError(404, 'Video not found'))
         }
+        // Sumar las vistas aún no flusheadas desde Redis para mostrar un
+        // contador "en vivo" (el valor en Mongo puede ir hasta un intervalo de
+        // flush por detrás). Nunca rompe la respuesta si Redis no está.
+        const pending = await getPendingViews(req.params.id)
+        if (pending) video.views = (video.views || 0) + pending
         res.status(200).json(video)
     } catch (err) {
         next(err)
@@ -74,18 +91,15 @@ export const getVideo = async (req, res, next) => {
 }
 
 export const addViews = async (req, res, next) => {
-    try {
-    const video = await Video.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { views: 1 } }, // incrementa views del video
-      { new: true }
-    );
-
-    if (video) {
-      // 🔹 Incrementar también las views del usuario dueño
-      await User.findByIdAndUpdate(video.userId, { $inc: { totalViews: 1 } });
-    }
-
+  try {
+    // Camino caliente: NO escribimos en Mongo. Bufferizamos en Redis con
+    // dedup por espectador; un job periódico hace el flush en bulk (ver
+    // services/viewCounter.js). Esto reemplaza los 2 writes por vista que
+    // antes golpeaban Mongo en cada reproducción.
+    await recordView({
+      videoId: req.params.id,
+      viewerId: getViewerId(req),
+    })
     res.status(200).json("The view has been increased.");
   } catch (err) {
     next(err);
