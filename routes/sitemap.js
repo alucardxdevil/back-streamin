@@ -28,7 +28,7 @@ router.get('/sitemap.xml', async (req, res) => {
       { loc: '/help',    changefreq: 'monthly', priority: '0.4' },
       { loc: '/terms',   changefreq: 'yearly',  priority: '0.3' },
       { loc: '/contact', changefreq: 'monthly', priority: '0.4' },
-      { loc: '/support', changefreq: 'monthly', priority: '0.4' },
+      { loc: '/advertise', changefreq: 'monthly', priority: '0.4' },
     ];
 
     // ── Videos (solo los que están listos para reproducción) ────────────────

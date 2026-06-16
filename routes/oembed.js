@@ -5,8 +5,17 @@ import { getPublicProfilePath, normalizeProfileSlug } from '../utils/profilePath
 
 const router = express.Router();
 
+import {
+  BRAND_NAME,
+  SEO_DEFAULT_TITLE,
+  SEO_DEFAULT_DESCRIPTION,
+  videoDescription,
+  profileDescription,
+  creatorBioFallback,
+} from '../config/seoBrand.js';
+
 const SITE_URL = process.env.SITE_URL || 'https://teleprt.com';
-const SITE_NAME = 'teleprt';
+const SITE_NAME = BRAND_NAME;
 
 /**
  * Escapa caracteres HTML para prevenir XSS en las meta tags.
@@ -47,8 +56,7 @@ router.get('/video/:id', async (req, res) => {
 
     const title = escapeHtml(video.title || 'Video');
     const description = escapeHtml(
-      (video.description || `Watch "${video.title}" on ${SITE_NAME}`)
-        .substring(0, 200)
+      (video.description || videoDescription(video.title)).substring(0, 200)
     );
     const thumbnail = escapeHtml(video.imgUrl || `${SITE_URL}/logo-icon.png`);
     const pageUrl = `${SITE_URL}/video/${video._id}`;
@@ -71,7 +79,7 @@ router.get('/video/:id', async (req, res) => {
       '@context': 'https://schema.org',
       '@type': 'VideoObject',
       name: video.title || 'Video',
-      description: video.description || `Watch "${video.title}" on ${SITE_NAME}`,
+      description: video.description || videoDescription(video.title),
       thumbnailUrl: [video.imgUrl || `${SITE_URL}/logo-icon.png`],
       uploadDate,
       contentUrl: video.hlsMasterUrl || video.videoUrl || '',
@@ -120,6 +128,7 @@ router.get('/video/:id', async (req, res) => {
 
   <!-- Twitter Cards -->
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@teleprt" />
   <meta name="twitter:title" content="${title} | ${SITE_NAME}" />
   <meta name="twitter:description" content="${description}" />
   <meta name="twitter:image" content="${thumbnail}" />
@@ -174,7 +183,7 @@ router.get('/profile/:slug', async (req, res) => {
 
     const name = escapeHtml(user.name || 'User');
     const description = escapeHtml(
-      (user.descriptionAccount || `Profile of ${user.name} on ${SITE_NAME}. ${user.follows || 0} followers.`)
+      (user.descriptionAccount || profileDescription(user.name, user.follows || 0))
         .substring(0, 200)
     );
     const profileImage = escapeHtml(user.img || `${SITE_URL}/logo-icon.png`);
@@ -187,7 +196,7 @@ router.get('/profile/:slug', async (req, res) => {
       name: user.name || 'User',
       url: profileUrl,
       image: user.img || `${SITE_URL}/logo-icon.png`,
-      description: user.descriptionAccount || `Content creator on ${SITE_NAME}`,
+      description: user.descriptionAccount || creatorBioFallback(),
       ...(user.follows && {
         interactionStatistic: {
           '@type': 'InteractionCounter',
@@ -217,6 +226,7 @@ router.get('/profile/:slug', async (req, res) => {
 
   <!-- Twitter Cards -->
   <meta name="twitter:card" content="summary" />
+  <meta name="twitter:site" content="@teleprt" />
   <meta name="twitter:title" content="${name} | ${SITE_NAME}" />
   <meta name="twitter:description" content="${description}" />
   <meta name="twitter:image" content="${profileImage}" />
@@ -252,21 +262,23 @@ function buildFallbackHtml() {
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>${SITE_NAME} — Share and discover videos</title>
-  <meta name="description" content="${SITE_NAME} is the platform for uploading, sharing, and discovering videos from independent creators." />
+  <title>${SEO_DEFAULT_TITLE}</title>
+  <meta name="description" content="${SEO_DEFAULT_DESCRIPTION}" />
   <meta property="og:site_name" content="${SITE_NAME}" />
-  <meta property="og:title" content="${SITE_NAME} — Share and discover videos" />
-  <meta property="og:description" content="${SITE_NAME} is the platform for uploading, sharing, and discovering videos from independent creators." />
+  <meta property="og:title" content="${SEO_DEFAULT_TITLE}" />
+  <meta property="og:description" content="${SEO_DEFAULT_DESCRIPTION}" />
   <meta property="og:image" content="${SITE_URL}/logo-icon.png" />
   <meta property="og:url" content="${SITE_URL}" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${SITE_NAME} — Share and discover videos" />
+  <meta name="twitter:site" content="@teleprt" />
+  <meta name="twitter:title" content="${SEO_DEFAULT_TITLE}" />
+  <meta name="twitter:description" content="${SEO_DEFAULT_DESCRIPTION}" />
   <meta name="twitter:image" content="${SITE_URL}/logo-icon.png" />
   <meta http-equiv="refresh" content="0;url=${SITE_URL}" />
 </head>
 <body>
   <h1>${SITE_NAME}</h1>
-  <p>Share and discover videos from independent creators.</p>
+  <p>${SEO_DEFAULT_DESCRIPTION}</p>
   <a href="${SITE_URL}">Go to ${SITE_NAME}</a>
 </body>
 </html>`;
