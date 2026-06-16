@@ -232,7 +232,7 @@ export const listPanelVideoComments = async (req, res, next) => {
 
 /**
  * POST /api/panel/videos/:videoId/comments — añadir comentario (moderación / soporte).
- * Requiere descriptionC y opcionalmente userId (debe existir); si no, usa STREAM_IN_PANEL_COMMENT_USER_ID.
+ * Requiere descriptionC y opcionalmente userId (debe existir); si no, usa TELEPRT_PANEL_COMMENT_USER_ID.
  */
 export const addPanelVideoComment = async (req, res, next) => {
   try {
@@ -248,12 +248,12 @@ export const addPanelVideoComment = async (req, res, next) => {
       return next(createError(404, 'Video no encontrado'));
     }
 
-    let userId = bodyUserId || process.env.STREAM_IN_PANEL_COMMENT_USER_ID;
+    let userId = bodyUserId || process.env.TELEPRT_PANEL_COMMENT_USER_ID;
     if (!userId) {
       return next(
         createError(
           400,
-          'Indique userId en el cuerpo o configure STREAM_IN_PANEL_COMMENT_USER_ID (ObjectId de usuario existente).'
+          'Indique userId en el cuerpo o configure TELEPRT_PANEL_COMMENT_USER_ID (ObjectId de usuario existente).'
         )
       );
     }

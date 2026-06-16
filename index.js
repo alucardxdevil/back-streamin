@@ -134,7 +134,7 @@ const corsOptions = {
     'X-CSRF-Token',
     'X-Requested-With',
     'Range',
-    'X-Stream-Panel-Key',
+    'X-Teleprt-Panel-Key',
   ],
   exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length'],
   // Cachear respuestas preflight (OPTIONS) por 1 hora.

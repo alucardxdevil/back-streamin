@@ -6,7 +6,7 @@
 #   sudo journalctl -u teleprt-transcode -f
 
 [Unit]
-Description=Stream-in HLS transcode worker (BullMQ)
+Description=teleprt HLS transcode worker (BullMQ)
 After=network-online.target
 Wants=network-online.target
 
