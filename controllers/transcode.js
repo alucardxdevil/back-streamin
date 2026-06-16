@@ -19,7 +19,7 @@ import Video from '../models/Video.js'
 // TTL de la presigned URL en segundos (15 minutos)
 const PRESIGNED_URL_TTL = 900
 
-// Tamaño máximo del video en bytes (800 MB — beta stream-in.com)
+// Tamaño máximo del video en bytes (800 MB — beta teleprt.com)
 const MAX_VIDEO_SIZE = 800 * 1024 * 1024
 
 /**

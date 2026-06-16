@@ -220,7 +220,7 @@ const cleanStaleVideos = async () => {
 
 const main = async () => {
   console.log('═══════════════════════════════════════════════')
-  console.log('  stream-in — Script de Limpieza Automática')
+  console.log('  teleprt — Script de Limpieza Automática')
   console.log(`  ${new Date().toISOString()}`)
   console.log('═══════════════════════════════════════════════')
 

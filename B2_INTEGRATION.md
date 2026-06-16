@@ -2,7 +2,7 @@
 
 ## Resumen
 
-Este documento describe la integración de Backblaze B2 como reemplazo de Firebase Storage en el backend de stream-in.
+Este documento describe la integración de Backblaze B2 como reemplazo de Firebase Storage en el backend de teleprt.
 
 ---
 

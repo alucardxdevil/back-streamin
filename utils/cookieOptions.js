@@ -2,7 +2,7 @@ const isProd = process.env.NODE_ENV === 'production';
 
 /**
  * Opciones de cookie `access_token` compatibles con local y producción.
- * En VPS: NODE_ENV=production, COOKIE_DOMAIN=.stream-in.com (opcional).
+ * En VPS: NODE_ENV=production, COOKIE_DOMAIN=.teleprt.com (opcional).
  */
 export function getAccessTokenCookieOptions() {
   const maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días
@@ -15,7 +15,7 @@ export function getAccessTokenCookieOptions() {
       path: '/',
     };
   }
-  const domain = process.env.COOKIE_DOMAIN || '.stream-in.com';
+  const domain = process.env.COOKIE_DOMAIN || '.teleprt.com';
   return {
     httpOnly: true,
     secure: true,
@@ -35,11 +35,11 @@ export function getAccessTokenCookieOptions() {
  * a Cloudflare reutilizar el cache entre viewers sin necesidad de
  * configurar cache keys custom (que requieren plan Enterprise).
  *
- * Requisitos para compartir cross-origin entre stream-in.com y
- * api.stream-in.com:
+ * Requisitos para compartir cross-origin entre teleprt.com y
+ * api.teleprt.com:
  *   - SameSite=None (cookie cross-site)
  *   - Secure=true   (obligatorio cuando SameSite=None)
- *   - Domain=.stream-in.com (compartida entre apex y subdominios)
+ *   - Domain=.teleprt.com (compartida entre apex y subdominios)
  *   - HttpOnly      (no leíble por JS — defensa contra XSS)
  *
  * @param {number} ttlSeconds - TTL del JWT (para alinear cookie maxAge)
@@ -55,7 +55,7 @@ export function getStreamSessionCookieOptions(ttlSeconds) {
       path: '/',
     };
   }
-  const domain = process.env.COOKIE_DOMAIN || '.stream-in.com';
+  const domain = process.env.COOKIE_DOMAIN || '.teleprt.com';
   return {
     httpOnly: true,
     secure: true,

@@ -5,8 +5,8 @@ import { getPublicProfilePath, normalizeProfileSlug } from '../utils/profilePath
 
 const router = express.Router();
 
-const SITE_URL = process.env.SITE_URL || 'https://stream-in.com';
-const SITE_NAME = 'stream-in';
+const SITE_URL = process.env.SITE_URL || 'https://teleprt.com';
+const SITE_NAME = 'teleprt';
 
 /**
  * Escapa caracteres HTML para prevenir XSS en las meta tags.
@@ -50,7 +50,7 @@ router.get('/video/:id', async (req, res) => {
       (video.description || `Watch "${video.title}" on ${SITE_NAME}`)
         .substring(0, 200)
     );
-    const thumbnail = escapeHtml(video.imgUrl || `${SITE_URL}/logo-pest.png`);
+    const thumbnail = escapeHtml(video.imgUrl || `${SITE_URL}/logo-icon.png`);
     const pageUrl = `${SITE_URL}/video/${video._id}`;
     const embedUrl = escapeHtml(video.hlsMasterUrl || video.videoUrl || '');
     const channelName = escapeHtml(channel?.name || 'Creator');
@@ -72,7 +72,7 @@ router.get('/video/:id', async (req, res) => {
       '@type': 'VideoObject',
       name: video.title || 'Video',
       description: video.description || `Watch "${video.title}" on ${SITE_NAME}`,
-      thumbnailUrl: [video.imgUrl || `${SITE_URL}/logo-pest.png`],
+      thumbnailUrl: [video.imgUrl || `${SITE_URL}/logo-icon.png`],
       uploadDate,
       contentUrl: video.hlsMasterUrl || video.videoUrl || '',
       embedUrl: video.hlsMasterUrl || video.videoUrl || '',
@@ -90,7 +90,7 @@ router.get('/video/:id', async (req, res) => {
       publisher: {
         '@type': 'Organization',
         name: SITE_NAME,
-        logo: { '@type': 'ImageObject', url: `${SITE_URL}/logo-pest.png` },
+        logo: { '@type': 'ImageObject', url: `${SITE_URL}/logo-icon.png` },
       },
       ...(durationISO && { duration: durationISO }),
       ...(video.tags?.length && { keywords: video.tags.join(', ') }),
@@ -177,7 +177,7 @@ router.get('/profile/:slug', async (req, res) => {
       (user.descriptionAccount || `Profile of ${user.name} on ${SITE_NAME}. ${user.follows || 0} followers.`)
         .substring(0, 200)
     );
-    const profileImage = escapeHtml(user.img || `${SITE_URL}/logo-pest.png`);
+    const profileImage = escapeHtml(user.img || `${SITE_URL}/logo-icon.png`);
     const profileUrl = getPublicProfilePath(user, { absolute: true, siteUrl: SITE_URL });
 
     // JSON-LD Person
@@ -186,7 +186,7 @@ router.get('/profile/:slug', async (req, res) => {
       '@type': 'Person',
       name: user.name || 'User',
       url: profileUrl,
-      image: user.img || `${SITE_URL}/logo-pest.png`,
+      image: user.img || `${SITE_URL}/logo-icon.png`,
       description: user.descriptionAccount || `Content creator on ${SITE_NAME}`,
       ...(user.follows && {
         interactionStatistic: {
@@ -257,11 +257,11 @@ function buildFallbackHtml() {
   <meta property="og:site_name" content="${SITE_NAME}" />
   <meta property="og:title" content="${SITE_NAME} — Share and discover videos" />
   <meta property="og:description" content="${SITE_NAME} is the platform for uploading, sharing, and discovering videos from independent creators." />
-  <meta property="og:image" content="${SITE_URL}/logo-pest.png" />
+  <meta property="og:image" content="${SITE_URL}/logo-icon.png" />
   <meta property="og:url" content="${SITE_URL}" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${SITE_NAME} — Share and discover videos" />
-  <meta name="twitter:image" content="${SITE_URL}/logo-pest.png" />
+  <meta name="twitter:image" content="${SITE_URL}/logo-icon.png" />
   <meta http-equiv="refresh" content="0;url=${SITE_URL}" />
 </head>
 <body>

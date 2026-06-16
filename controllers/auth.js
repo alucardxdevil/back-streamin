@@ -239,12 +239,12 @@ export const forgotPassword = async (req, res, next) => {
         )
 
         const resetUrl = `${FRONTEND_URL}/reset-password?token=${encodeURIComponent(rawToken)}`
-        const subject = 'Password Recovery - stream-in'
+        const subject = 'Password Recovery - teleprt'
         const html = `
           <div style="font-family: Arial, sans-serif; color: #111;">
             <h2 style="margin-bottom: 8px;">Password Recovery</h2>
             <p>Hello ${escapeHtml(user.name || '')},</p>
-            <p>We received a request to recover your password at stream-in.</p>
+            <p>We received a request to recover your password at teleprt.</p>
             <p>
               Click on the following link to continue:
               <br />

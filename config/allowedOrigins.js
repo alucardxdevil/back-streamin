@@ -1,6 +1,6 @@
 /**
  * Orígenes permitidos para CORS y validación CSRF.
- * Producción: Cloudflare Pages (stream-in.com) → API en VPS (api.stream-in.com).
+ * Producción: Cloudflare Pages (teleprt.com) → API en VPS (api.teleprt.com).
  */
 
 const isProduction = process.env.NODE_ENV === 'production'
@@ -13,8 +13,8 @@ export function getAllowedOrigins() {
 
   if (isProduction) {
     const defaultProdOrigins = [
-      'https://stream-in.com',
-      'https://www.stream-in.com',
+      'https://teleprt.com',
+      'https://www.teleprt.com',
     ]
     for (const o of defaultProdOrigins) {
       if (!origins.includes(o)) origins.push(o)

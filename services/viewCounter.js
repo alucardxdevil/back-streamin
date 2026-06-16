@@ -179,4 +179,23 @@ export const stopViewFlusher = async () => {
   await flushViews()
 }
 
-export default { recordView, getPendingViews, flushViews, startViewFlusher, stopViewFlusher }
+/**
+ * Resumen de vistas pendientes de flush (para panel de infraestructura).
+ * @returns {Promise<{ videosWithPending: number, pendingViewsTotal: number, error?: string }>}
+ */
+export const getPendingViewsSummary = async () => {
+  try {
+    const r = getRedis()
+    const all = await r.hgetall(PENDING_VIDEOS_KEY)
+    const entries = Object.entries(all || {})
+    let pendingViewsTotal = 0
+    for (const [, n] of entries) {
+      pendingViewsTotal += parseInt(n, 10) || 0
+    }
+    return { videosWithPending: entries.length, pendingViewsTotal }
+  } catch (err) {
+    return { videosWithPending: 0, pendingViewsTotal: 0, error: err.message }
+  }
+}
+
+export default { recordView, getPendingViews, flushViews, startViewFlusher, stopViewFlusher, getPendingViewsSummary }

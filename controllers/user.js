@@ -68,7 +68,7 @@ export const deleteUser = async (req, res, next) => {
                     deletedAt: new Date(),
                     tokenVersion: (req.user.tokenVersion || 1) + 1,
                     // Invalidar email para que no pueda usarse en registro
-                    email: `deleted_${Date.now()}_${req.params.id}@deleted.stream-in.com`,
+                    email: `deleted_${Date.now()}_${req.params.id}@deleted.teleprt.com`,
                     // Limpiar datos sensibles
                     password: 'DELETED',
                     passwordResetTokenHash: null,

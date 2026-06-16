@@ -4,6 +4,27 @@ import { createError } from '../err.js';
 import User from '../models/User.js';
 import Video from '../models/Video.js';
 import Comment from '../models/Comments.js';
+import { getQueueStats, enqueueTranscodeJob } from '../queues/transcodeQueue.js';
+import { flushViews, getPendingViewsSummary } from '../services/viewCounter.js';
+import { createRedisConnection } from '../config/redis.js';
+
+const MONGO_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+function lastMonthsKeys(n = 6) {
+  const keys = [];
+  const now = new Date();
+  for (let i = n - 1; i >= 0; i -= 1) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return keys;
+}
+
+function monthOverMonthTrend(current, previous) {
+  if (previous == null || previous === 0) return current > 0 ? 100 : null;
+  return Math.round(((current - previous) / previous) * 100);
+}
 
 function escapeRegex(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -35,9 +56,20 @@ export const listPanelUsers = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     const baseFilter = { isDeleted: { $ne: true } };
-    const filter = q
-      ? { ...baseFilter, name: { $regex: new RegExp(escapeRegex(q), 'i') } }
-      : baseFilter;
+    const filter = { ...baseFilter };
+
+    if (q) {
+      filter.$or = [
+        { name: { $regex: new RegExp(escapeRegex(q), 'i') } },
+        { email: { $regex: new RegExp(escapeRegex(q), 'i') } },
+      ];
+    }
+
+    if (req.query.isBanned === 'true') {
+      filter.isBanned = true;
+    } else if (req.query.isBanned === 'false') {
+      filter.isBanned = { $ne: true };
+    }
 
     const [items, total] = await Promise.all([
       User.find(filter)
@@ -410,7 +442,7 @@ export const deletePanelUser = async (req, res, next) => {
         isDeleted: true,
         deletedAt: new Date(),
         tokenVersion: (user.tokenVersion || 1) + 1,
-        email: `deleted_${Date.now()}_${id}@deleted.stream-in.com`,
+        email: `deleted_${Date.now()}_${id}@deleted.teleprt.com`,
         password: 'DELETED',
         passwordResetTokenHash: null,
         passwordResetExpires: null,
@@ -418,6 +450,295 @@ export const deletePanelUser = async (req, res, next) => {
     });
 
     res.status(200).json({ message: 'Usuario eliminado', id });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/panel/stats — métricas agregadas de plataforma para el dashboard del panel.
+ */
+export const getPanelStats = async (req, res, next) => {
+  try {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [
+      totalUsers,
+      totalVideos,
+      bannedUsers,
+      activeUsers,
+      newUsersThisMonth,
+      newVideosThisMonth,
+      videosByStatus,
+      totalViewsResult,
+      topVideos,
+      topUsers,
+      videosByMonth,
+      usersByMonth,
+      pendingComments,
+    ] = await Promise.all([
+      User.countDocuments({ isDeleted: { $ne: true } }),
+      Video.countDocuments({}),
+      User.countDocuments({ isDeleted: { $ne: true }, isBanned: true }),
+      User.countDocuments({ isDeleted: { $ne: true }, updatedAt: { $gte: thirtyDaysAgo } }),
+      User.countDocuments({ isDeleted: { $ne: true }, createdAt: { $gte: startOfMonth } }),
+      Video.countDocuments({ createdAt: { $gte: startOfMonth } }),
+      Video.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Video.aggregate([{ $group: { _id: null, total: { $sum: '$views' } } }]),
+      Video.find({}).sort({ views: -1 }).limit(5).select('title views status visibility').lean(),
+      User.find({ isDeleted: { $ne: true } })
+        .sort({ totalViews: -1 })
+        .limit(6)
+        .select('name slug img imgBanner follows totalViews')
+        .lean(),
+      Video.aggregate([
+        { $match: { createdAt: { $gte: sixMonthsAgo } } },
+        { $group: { _id: { y: { $year: '$createdAt' }, m: { $month: '$createdAt' } }, count: { $sum: 1 } } },
+      ]),
+      User.aggregate([
+        { $match: { isDeleted: { $ne: true }, createdAt: { $gte: sixMonthsAgo } } },
+        { $group: { _id: { y: { $year: '$createdAt' }, m: { $month: '$createdAt' } }, count: { $sum: 1 } } },
+      ]),
+      Comment.countDocuments({ moderationStatus: { $in: ['pending', 'hidden'] } }),
+    ]);
+
+    const statusMap = Object.fromEntries(videosByStatus.map((s) => [s._id || 'unknown', s.count]));
+    const vMonthMap = new Map(
+      videosByMonth.map(({ _id, count }) => [`${_id.y}-${String(_id.m).padStart(2, '0')}`, count]),
+    );
+    const uMonthMap = new Map(
+      usersByMonth.map(({ _id, count }) => [`${_id.y}-${String(_id.m).padStart(2, '0')}`, count]),
+    );
+
+    const chartData = lastMonthsKeys(6).map((k) => {
+      const [, m] = k.split('-');
+      return {
+        name: MONTH_NAMES[parseInt(m, 10) - 1] || k,
+        videos: vMonthMap.get(k) || 0,
+        users: uMonthMap.get(k) || 0,
+      };
+    });
+
+    const lastMonth = chartData[chartData.length - 1];
+    const prevMonth = chartData[chartData.length - 2];
+
+    res.status(200).json({
+      totalVideos,
+      totalUsers,
+      activeUsers,
+      activeUsersPercent: totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0,
+      bannedUsers,
+      newUsersThisMonth,
+      newVideosThisMonth,
+      totalViews: totalViewsResult[0]?.total || 0,
+      pendingComments,
+      videosByStatus: statusMap,
+      videosReady: statusMap.ready || 0,
+      videosProcessing: (statusMap.processing || 0) + (statusMap.pending || 0),
+      videosError: statusMap.error || 0,
+      revenue: 0,
+      chartData,
+      trends: {
+        users: prevMonth ? monthOverMonthTrend(lastMonth?.users || 0, prevMonth.users) : null,
+        videos: prevMonth ? monthOverMonthTrend(lastMonth?.videos || 0, prevMonth.videos) : null,
+      },
+      topVideos: topVideos.map((v) => ({
+        title: (v.title || 'Video').slice(0, 40),
+        views: v.views || 0,
+      })),
+      topUsers,
+      source: 'panel',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/panel/videos — listado administrativo paginado (incluye ocultos y todos los estados).
+ */
+export const listPanelVideos = async (req, res, next) => {
+  try {
+    const q = req.query.q != null ? String(req.query.q).trim() : '';
+    const status = req.query.status || 'all';
+    const visibility = req.query.visibility || 'all';
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+    if (q) {
+      filter.$or = [
+        { title: { $regex: new RegExp(escapeRegex(q), 'i') } },
+        { tags: { $regex: new RegExp(escapeRegex(q), 'i') } },
+      ];
+    }
+    if (status !== 'all') filter.status = status;
+    if (visibility !== 'all') filter.visibility = visibility;
+
+    const [items, total] = await Promise.all([
+      Video.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Video.countDocuments(filter),
+    ]);
+
+    res.status(200).json({ videos: items, total, page, limit, pages: Math.ceil(total / limit) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/panel/videos/:id — detalle administrativo de un video.
+ */
+export const getPanelVideo = async (req, res, next) => {
+  try {
+    const video = await Video.findById(req.params.id).lean();
+    if (!video) {
+      return res.status(404).json({ message: 'Video no encontrado' });
+    }
+    res.status(200).json(video);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/panel/infrastructure — salud de API, Mongo, Redis, cola de transcode y vistas pendientes.
+ */
+export const getPanelInfrastructure = async (req, res, next) => {
+  try {
+    const [queueStats, viewsPending, redisPing] = await Promise.all([
+      getQueueStats().catch((e) => ({ error: e.message })),
+      getPendingViewsSummary(),
+      (async () => {
+        try {
+          const r = createRedisConnection();
+          const pong = await r.ping();
+          await r.quit();
+          return { ok: pong === 'PONG' };
+        } catch (e) {
+          return { ok: false, error: e.message };
+        }
+      })(),
+    ]);
+
+    res.status(200).json({
+      api: {
+        nodeVersion: process.version,
+        uptimeSeconds: Math.floor(process.uptime()),
+        env: process.env.NODE_ENV || 'development',
+      },
+      mongodb: {
+        state: MONGO_STATES[mongoose.connection.readyState] || 'unknown',
+        host: mongoose.connection.host || null,
+        name: mongoose.connection.name || null,
+      },
+      redis: redisPing,
+      transcodeQueue: queueStats,
+      viewCounter: {
+        ...viewsPending,
+        flushIntervalMs: parseInt(process.env.VIEW_FLUSH_INTERVAL_MS, 10) || 30000,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/panel/views/flush — fuerza flush de vistas pendientes en Redis → Mongo.
+ */
+export const panelFlushViews = async (req, res, next) => {
+  try {
+    await flushViews();
+    const afterFlush = await getPendingViewsSummary();
+    res.status(200).json({ success: true, afterFlush });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/panel/transcode/retry/:videoId — reintento administrativo de transcodificación.
+ */
+export const panelRetryTranscode = async (req, res, next) => {
+  try {
+    const { videoId } = req.params;
+    const video = await Video.findById(videoId);
+
+    if (!video) return next(createError(404, 'Video no encontrado'));
+    if (video.status !== 'error') {
+      return next(createError(400, `No se puede reintentar un video con status: ${video.status}`));
+    }
+    if (!video.rawKey) {
+      return next(createError(400, 'El archivo original ya fue eliminado. No se puede reintentar.'));
+    }
+
+    await Video.findByIdAndUpdate(videoId, {
+      status: 'pending',
+      transcodeError: null,
+      transcodeJobId: null,
+    });
+
+    const job = await enqueueTranscodeJob({
+      videoId,
+      rawKey: video.rawKey,
+      userId: String(video.userId),
+      title: video.title,
+    });
+
+    await Video.findByIdAndUpdate(videoId, { transcodeJobId: job.id });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        videoId,
+        jobId: job.id,
+        status: 'pending',
+        message: 'Transcodificación re-encolada por panel',
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/panel/comments — cola global de comentarios para moderación.
+ */
+export const listPanelCommentsModeration = async (req, res, next) => {
+  try {
+    const status = req.query.status || 'pending';
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+
+    const filter =
+      status === 'all'
+        ? { moderationStatus: { $in: ['pending', 'hidden'] } }
+        : { moderationStatus: status };
+
+    const comments = await Comment.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+
+    const userIds = [...new Set(comments.map((c) => c.userId).filter(Boolean))];
+    const videoIds = [...new Set(comments.map((c) => c.videoId).filter(Boolean))];
+
+    const [users, videos] = await Promise.all([
+      User.find({ _id: { $in: userIds } }).select('name slug img').lean(),
+      Video.find({ _id: { $in: videoIds } }).select('title visibility status').lean(),
+    ]);
+
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
+    const videoMap = new Map(videos.map((v) => [String(v._id), v]));
+
+    const enriched = comments.map((c) => ({
+      ...c,
+      author: userMap.get(String(c.userId)) || { _id: c.userId, name: 'Usuario', slug: '' },
+      video: videoMap.get(String(c.videoId)) || { _id: c.videoId, title: '(video eliminado)' },
+    }));
+
+    res.status(200).json({ comments: enriched, total: enriched.length });
   } catch (err) {
     next(err);
   }

@@ -1,7 +1,7 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "description": "stream-in API Server con HLS Streaming",
+  "description": "teleprt API Server con HLS Streaming",
   "main": "index.js",
   "type": "module",
   "engines": {

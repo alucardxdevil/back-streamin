@@ -1,5 +1,5 @@
 /**
- * Rutas del Sistema de Protección de Video — stream-in
+ * Rutas del Sistema de Protección de Video — teleprt
  *
  * Todas las rutas de este módulo están protegidas por múltiples capas:
  *

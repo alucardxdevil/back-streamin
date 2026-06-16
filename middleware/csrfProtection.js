@@ -2,8 +2,8 @@
  * Protección CSRF — double-submit cookie + validación de Origin.
  *
  * Diseñado para producción:
- *  - Frontend: Cloudflare Pages (https://stream-in.com)
- *  - API: VPS Hetzner (https://api.stream-in.com) con COOKIE_DOMAIN=.stream-in.com
+ *  - Frontend: Cloudflare Pages (https://teleprt.com)
+ *  - API: VPS Hetzner (https://api.teleprt.com) con COOKIE_DOMAIN=.teleprt.com
  *
  * Clientes móviles (Flutter) usan Bearer sin cookie → exentos de CSRF.
  */
@@ -34,7 +34,7 @@ export function getCsrfCookieOptions() {
     }
   }
 
-  const domain = process.env.COOKIE_DOMAIN || '.stream-in.com'
+  const domain = process.env.COOKIE_DOMAIN || '.teleprt.com'
   return {
     httpOnly: false,
     secure: true,

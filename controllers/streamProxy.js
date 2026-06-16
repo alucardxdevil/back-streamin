@@ -1,5 +1,5 @@
 /**
- * Proxy de Streaming de Video — stream-in
+ * Proxy de Streaming de Video — teleprt
  *
  * Capa de protección: PROXY BACKEND (Capa 4)
  * Amenaza cubierta: Exposición directa de URLs de Backblaze B2.
@@ -102,7 +102,7 @@ const extractB2Key = (url) => {
  * Maneja tanto URLs absolutas como rutas relativas.
  *
  * IMPORTANTE: ya NO incluimos `_st` (token de sesin) en las URLs reescritas.
- * El token viaja como cookie HttpOnly `stream_session` (Domain=.stream-in.com)
+ * El token viaja como cookie HttpOnly `stream_session` (Domain=.teleprt.com)
  * y se enva automticamente por el navegador en cada peticin con
  * withCredentials=true. Esto garantiza que todos los usuarios consuman la
  * MISMA URL para el mismo segmento, lo que permite a Cloudflare reutilizar

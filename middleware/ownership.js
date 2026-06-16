@@ -1,5 +1,5 @@
 /**
- * Middleware de Autorización de Propietario — stream-in
+ * Middleware de Autorización de Propietario — teleprt
  * 
  * Capa de protección: AUTORIZACIÓN (Capa 7)
  * Amenaza cubierta: Broken Access Control - usuarios modificando datos de otros usuarios

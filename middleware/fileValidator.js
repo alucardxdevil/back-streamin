@@ -1,5 +1,5 @@
 /**
- * Middleware de Validación de Archivos — stream-in
+ * Middleware de Validación de Archivos — teleprt
  *
  * Capa de protección: VALIDACIÓN DE ARCHIVOS (Capa 7)
  * Amenaza cubierta: Upload de archivos maliciosos, MIME spoofing, extensión fake

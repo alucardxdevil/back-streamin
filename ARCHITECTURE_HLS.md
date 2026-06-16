@@ -1,4 +1,4 @@
-# Arquitectura HLS Streaming — stream-in
+# Arquitectura HLS Streaming — teleprt
 
 ## Visión General
 

@@ -1,5 +1,5 @@
 /**
- * Middleware de Validación de Origen — stream-in
+ * Middleware de Validación de Origen — teleprt
  *
  * Capa de protección: VALIDACIÓN DE ORIGEN (Capa 2)
  * Amenaza cubierta: Acceso directo desde navegadores externos, aplicaciones de

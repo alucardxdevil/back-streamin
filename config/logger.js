@@ -1,5 +1,5 @@
 /**
- * Sistema de Logging Estructurado — stream-in
+ * Sistema de Logging Estructurado — teleprt
  *
  * Capa de protección: MONITOREO Y AUDITORÍA (Capa 7)
  * Amenaza cubierta: Detección de abuso, scraping masivo, extracción sistemática.

@@ -1,5 +1,5 @@
 /**
- * Middleware de Sanitización de Entrada — stream-in
+ * Middleware de Sanitización de Entrada — teleprt
  * 
  * Capa de protección: SANITIZACIÓN DE INPUT (Capa 7)
  * Amenaza cubierta: XSS (Cross-Site Scripting) - inyección de scripts maliciosos

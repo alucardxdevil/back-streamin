@@ -14,11 +14,11 @@ const router = express.Router();
  *  • URLs de todos los perfiles de usuario públicos
  *
  * Google y otros crawlers pueden consumir este endpoint directamente.
- * Configurar en robots.txt: Sitemap: https://stream-in.com/sitemap.xml
+ * Configurar en robots.txt: Sitemap: https://teleprt.com/sitemap.xml
  */
 router.get('/sitemap.xml', async (req, res) => {
   try {
-    const SITE_URL = process.env.SITE_URL || 'https://stream-in.com';
+    const SITE_URL = process.env.SITE_URL || 'https://teleprt.com';
 
     // ── Rutas estáticas ────────────────────────────────────────────────────
     const staticRoutes = [

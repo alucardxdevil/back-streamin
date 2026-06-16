@@ -1,4 +1,4 @@
-# Sistema de Protección de Video — stream-in
+# Sistema de Protección de Video — teleprt
 
 ## Resumen Ejecutivo
 
