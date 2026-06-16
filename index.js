@@ -17,7 +17,7 @@ import panelRoute from './routes/panel.js'
 import cors from 'cors'
 import logger from './config/logger.js'
 import { validateSecretsOnStartup } from './utils/secrets.js'
-import { getAllowedOrigins } from './config/allowedOrigins.js'
+import { getAllowedOrigins, isOriginAllowed } from './config/allowedOrigins.js'
 import { csrfProtection } from './middleware/csrfProtection.js'
 import { startViewFlusher } from './services/viewCounter.js'
 
@@ -101,6 +101,9 @@ app.use(compression({
 // ── Configuración de CORS ──────────────────────────────────────────────────────
 const isProduction = process.env.NODE_ENV === 'production'
 const allowedOrigins = getAllowedOrigins()
+if (isProduction) {
+  logger.info('CORS orígenes permitidos', { allowedOrigins })
+}
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -117,11 +120,11 @@ const corsOptions = {
       return callback(null, true)
     }
 
-    // En producción, validar contra el array de .env
-    if (allowedOrigins.includes(origin)) {
+    // En producción, validar contra orígenes permitidos (comparación normalizada)
+    if (isOriginAllowed(origin, allowedOrigins)) {
       return callback(null, true)
     } else {
-      logger.warn('CORS bloqueado', { origin })
+      logger.warn('CORS bloqueado', { origin, allowedOrigins })
       return callback(null, false)
     }
   },
