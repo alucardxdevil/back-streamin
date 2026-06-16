@@ -15,7 +15,8 @@
     "cleanup": "node scripts/cleanup.js",
     "setup-b2-cors": "node scripts/setup-b2-cors.js",
     "setup-b2-cors:proxy-only": "node scripts/setup-b2-cors.js --mode=proxy-only",
-    "setup-b2-cors:upload-only": "node scripts/setup-b2-cors.js --mode=upload-only"
+    "setup-b2-cors:upload-only": "node scripts/setup-b2-cors.js --mode=upload-only",
+    "validate:seo": "node scripts/validate-seo-brand.js"
   },
   "keywords": [],
   "author": "",
