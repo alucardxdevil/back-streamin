@@ -59,13 +59,9 @@ export function validateSecretsOnStartup() {
   getJwtSecret()
   getSessionSecret()
 
-  if (
-    process.env.NODE_ENV === 'production' &&
-    !process.env.GOOGLE_CLIENT_ID &&
-    !process.env.FIREBASE_PROJECT_ID
-  ) {
-    console.warn(
-      '[Security] FIREBASE_PROJECT_ID no configurado — login con Google (Firebase Auth) fallará en producción'
+  if (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_PROJECT_ID?.trim()) {
+    throw new Error(
+      'FIREBASE_PROJECT_ID is required in production for Google Sign-In (Firebase Auth)'
     )
   }
 }
