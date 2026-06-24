@@ -1,5 +1,6 @@
 /**
  * Maps MongoDB duplicate key errors to user-friendly auth responses.
+ * ok
  */
 export function handleMongoDuplicateError(err, res) {
   if (err?.code !== 11000) {
