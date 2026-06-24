@@ -2,6 +2,7 @@ import express from 'express';
 import Video from '../models/Video.js';
 import User from '../models/User.js';
 import { getPublicProfilePath } from '../utils/profilePaths.js';
+import { resolveSiteUrl } from '../../shared/resolveSiteUrl.js';
 
 const router = express.Router();
 
@@ -18,8 +19,7 @@ const router = express.Router();
  */
 router.get('/sitemap.xml', async (req, res) => {
   try {
-    const SITE_URL = process.env.SITE_URL || 'https://teleprt.com';
-
+    const SITE_URL = resolveSiteUrl(process.env.SITE_URL);
     // ── Rutas estáticas ────────────────────────────────────────────────────
     const staticRoutes = [
       { loc: '/',        changefreq: 'daily',   priority: '1.0' },

@@ -12,9 +12,11 @@ import {
   videoDescription,
   profileDescription,
   creatorBioFallback,
+  assertNoLegacyBrand,
 } from '../config/seoBrand.js';
+import { resolveSiteUrl } from '../../shared/resolveSiteUrl.js';
 
-const SITE_URL = process.env.SITE_URL || 'https://teleprt.com';
+const SITE_URL = resolveSiteUrl(process.env.SITE_URL);
 const SITE_NAME = BRAND_NAME;
 
 /**
@@ -149,6 +151,7 @@ router.get('/video/:id', async (req, res) => {
 </body>
 </html>`;
 
+    assertNoLegacyBrand(html);
     res.set('Content-Type', 'text/html; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=3600, s-maxage=86400');
     res.status(200).send(html);
@@ -245,6 +248,7 @@ router.get('/profile/:slug', async (req, res) => {
 </body>
 </html>`;
 
+    assertNoLegacyBrand(html);
     res.set('Content-Type', 'text/html; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=3600, s-maxage=86400');
     res.status(200).send(html);
