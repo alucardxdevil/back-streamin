@@ -128,4 +128,10 @@ export const authRateLimiter = createLimiter({
   skipSuccessfulRequests: true,
 })
 
-export default { streamRateLimiter, sessionRateLimiter, videoMetaRateLimiter, authRateLimiter }
+/** Beacon de visitas SPA — límite generoso por IP. */
+export const analyticsRateLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.ANALYTICS_RATE_MAX) || 120,
+})
+
+export default { streamRateLimiter, sessionRateLimiter, videoMetaRateLimiter, authRateLimiter, analyticsRateLimiter }

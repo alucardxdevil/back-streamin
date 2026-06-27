@@ -6,6 +6,7 @@ import Video from '../models/Video.js';
 import Comment from '../models/Comments.js';
 import { getQueueStats, enqueueTranscodeJob } from '../queues/transcodeQueue.js';
 import { flushViews, getPendingViewsSummary } from '../services/viewCounter.js';
+import { getVisitorAnalyticsSnapshot } from '../services/siteAnalytics.js';
 import { createRedisConnection } from '../config/redis.js';
 
 const MONGO_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
@@ -479,6 +480,7 @@ export const getPanelStats = async (req, res, next) => {
       videosByMonth,
       usersByMonth,
       pendingComments,
+      visitorAnalytics,
     ] = await Promise.all([
       User.countDocuments({ isDeleted: { $ne: true } }),
       Video.countDocuments({}),
@@ -503,6 +505,7 @@ export const getPanelStats = async (req, res, next) => {
         { $group: { _id: { y: { $year: '$createdAt' }, m: { $month: '$createdAt' } }, count: { $sum: 1 } } },
       ]),
       Comment.countDocuments({ moderationStatus: { $in: ['pending', 'hidden'] } }),
+      getVisitorAnalyticsSnapshot().catch(() => null),
     ]);
 
     const statusMap = Object.fromEntries(videosByStatus.map((s) => [s._id || 'unknown', s.count]));
@@ -551,6 +554,15 @@ export const getPanelStats = async (req, res, next) => {
       })),
       topUsers,
       source: 'panel',
+      visitors: visitorAnalytics
+        ? {
+            totalUniqueVisitors: visitorAnalytics.totalUniqueVisitors,
+            totalPageViews: visitorAnalytics.totalPageViews,
+            onlineNow: visitorAnalytics.onlineNow,
+            visitorsLast24h: visitorAnalytics.visitorsLast24h,
+            topCountries: (visitorAnalytics.countries || []).slice(0, 5),
+          }
+        : null,
     });
   } catch (err) {
     next(err);

@@ -74,7 +74,7 @@ function usesBearerOnlyAuth(req) {
 }
 
 function isCsrfExemptPath(path) {
-  const exemptPrefixes = ['/api/stream', '/api/panel', '/api/og', '/api/auth/csrf']
+  const exemptPrefixes = ['/api/stream', '/api/panel', '/api/og', '/api/auth/csrf', '/api/analytics']
   return exemptPrefixes.some((prefix) => path.startsWith(prefix))
 }
 

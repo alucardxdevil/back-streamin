@@ -19,12 +19,18 @@ import {
   patchPanelVideo,
   deletePanelVideo,
 } from '../controllers/panel.js';
+import {
+  getPanelVisitorAnalytics,
+  getPanelRealtimeAnalytics,
+} from '../controllers/panelAnalytics.js';
 
 const router = express.Router();
 
 router.use(verifyPanelApiKey);
 
 router.get('/stats', getPanelStats);
+router.get('/analytics/visitors', getPanelVisitorAnalytics);
+router.get('/analytics/realtime', getPanelRealtimeAnalytics);
 router.get('/infrastructure', getPanelInfrastructure);
 router.post('/views/flush', panelFlushViews);
 router.post('/transcode/retry/:videoId', panelRetryTranscode);

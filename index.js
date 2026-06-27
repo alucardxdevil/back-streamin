@@ -14,12 +14,14 @@ import streamRoute from './routes/stream.js'
 import sitemapRoute from './routes/sitemap.js'
 import ogRoute from './routes/oembed.js'
 import panelRoute from './routes/panel.js'
+import analyticsRoute from './routes/analytics.js'
 import cors from 'cors'
 import logger from './config/logger.js'
 import { validateSecretsOnStartup } from './utils/secrets.js'
 import { getAllowedOrigins, isOriginAllowed } from './config/allowedOrigins.js'
 import { csrfProtection } from './middleware/csrfProtection.js'
 import { startViewFlusher } from './services/viewCounter.js'
+import { startSiteAnalyticsLogger } from './services/siteAnalytics.js'
 
 validateSecretsOnStartup()
 
@@ -161,6 +163,7 @@ app.use(csrfProtection)
 
 // ── Rutas de la API ────────────────────────────────────────────────────────────
 app.use('/api/panel', panelRoute)
+app.use('/api/analytics', analyticsRoute)
 app.use('/api/users', userRoute)
 app.use('/api/videos', videoRoute)
 app.use('/api/comments', commentRoute)
@@ -230,6 +233,7 @@ app.listen(PORT,  () => {
     connect()
     // Buffer de vistas en Redis → flush periódico a Mongo (F-14 / N-02).
     startViewFlusher()
+    startSiteAnalyticsLogger()
     logger.info(`Servidor iniciado en puerto ${PORT}`)
     console.log(`Connected on port ${PORT}`)
 })
