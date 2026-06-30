@@ -140,37 +140,47 @@ Elimina un archivo de B2.
 
 ### 3. Configurar CORS (Importante)
 
-Para que el upload directo funcione desde el navegador, configura CORS en el bucket:
+Para que el upload directo funcione desde el navegador (presigned PUT a `s3.*.backblazeb2.com`), el bucket debe permitir los orígenes de **teleprt.com**.
 
-```json
-[
-    {
-        "AllowedHeaders": [
-            "*"
-        ],
-        "AllowedMethods": [
-            "PUT",
-            "POST",
-            "GET"
-        ],
-        "AllowedOrigins": [
-            "http://localhost:3000",
-            "https://tu-dominio.com"
-        ],
-        "ExposeHeaders": [
-            "ETag"
-        ],
-        "MaxAgeSeconds": 3600
-    }
-]
-```
+#### Opción A — Script Node (recomendado)
 
-Para configurar CORS, usa el CLI de B2:
+Desde `server/` con `B2_KEY_ID`, `B2_APP_KEY` y `B2_BUCKET_NAME` en `.env`:
+
 ```bash
-b2 update-bucket --cors-rules-file cors.json stream-videos public
+npm run setup-b2-cors
 ```
 
-O desde el panel de B2: Bucket Settings > CORS Rules
+#### Opción B — CLI de Backblaze
+
+```bash
+pip install b2
+b2 account authorize
+# Key ID y App Key desde Backblaze → Application Keys
+
+cd server
+b2 bucket update streamin-videos --cors-rules config/b2-cors-teleprt.json
+```
+
+CLI antiguo:
+
+```bash
+b2 authorize-account TU_KEY_ID TU_APP_KEY
+b2 update-bucket --cors-rules-file config/b2-cors-teleprt.json streamin-videos allPublic
+```
+
+#### Opción C — Panel web
+
+Backblaze → Buckets → `streamin-videos` → **Bucket Settings** → **CORS Rules**  
+(pega el contenido de [`config/b2-cors-teleprt.json`](config/b2-cors-teleprt.json))
+
+#### Orígenes incluidos en `b2-cors-teleprt.json`
+
+- `https://teleprt.com`, `https://www.teleprt.com`
+- `https://front-teleprt.pages.dev`, `https://admin.teleprt.com`
+- Legacy: `stream-in.com`, `www.stream-in.com`
+- Dev: `localhost:3000`, `5173`, `5000`
+
+Para editar dominios, modifica `config/b2-cors-teleprt.json` y vuelve a aplicar.
 
 ---
 

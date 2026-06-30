@@ -3,8 +3,9 @@
  * Envía el mismo secreto en header `X-Teleprt-Panel-Key` o `Authorization: Bearer <clave>`.
  */
 export function verifyPanelApiKey(req, res, next) {
-  const expected =
-    process.env.TELEPRT_PANEL_API_KEY || process.env.STREAM_IN_PANEL_API_KEY;
+  const expected = String(
+    process.env.TELEPRT_PANEL_API_KEY || process.env.STREAM_IN_PANEL_API_KEY || '',
+  ).trim();
   if (!expected || expected.length < 16) {
     return res.status(503).json({
       success: false,
@@ -17,7 +18,7 @@ export function verifyPanelApiKey(req, res, next) {
     req.headers['x-teleprt-panel-key'] || req.headers['x-stream-in-panel-key'];
   const auth = req.headers.authorization;
   const bearer = auth && /^Bearer\s+/i.test(auth) ? auth.replace(/^Bearer\s+/i, '').trim() : null;
-  const provided = (typeof headerKey === 'string' && headerKey) || bearer;
+  const provided = String((typeof headerKey === 'string' && headerKey) || bearer || '').trim();
 
   if (!provided || provided !== expected) {
     return res.status(401).json({ success: false, message: 'Credenciales de panel inválidas' });

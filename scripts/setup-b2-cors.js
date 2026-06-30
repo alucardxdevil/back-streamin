@@ -7,12 +7,20 @@
  *   Incluso si alguien obtiene una URL de B2, el navegador bloqueará la solicitud
  *   si no proviene del dominio autorizado.
  *
- * IMPORTANTE: Con el proxy backend implementado, el cliente NUNCA accede
- * directamente a B2. Esta configuración CORS es una capa adicional de seguridad
- * para el caso en que el proxy falle o sea bypasseado.
+ * IMPORTANTE: Para subida directa cliente→B2 (presigned PUT), el bucket DEBE
+ * tener CORS con los dominios del frontend (teleprt.com, etc.).
+ * Ejecutar este script tras cambiar de dominio (p. ej. stream-in → teleprt).
  *
  * Ejecutar UNA VEZ (o cuando cambien los dominios):
  *   node server/scripts/setup-b2-cors.js
+ *   npm run setup-b2-cors          (desde server/)
+ *
+ * Con el CLI de Backblaze (alternativa):
+ *   b2 account authorize
+ *   b2 bucket update streamin-videos --cors-rules config/b2-cors-teleprt.json
+ *
+ * Archivos JSON listos: server/config/b2-cors-teleprt.json (upload+read)
+ *                       server/config/b2-cors-upload-only.json (solo upload)
  *
  * Para modo restrictivo (solo servidor backend, sin acceso directo del navegador):
  *   node server/scripts/setup-b2-cors.js --mode=proxy-only
@@ -49,6 +57,17 @@ const mode = modeArg ? modeArg.split('=')[1] : 'upload-only'
 const rawOrigins = process.env.ALLOWED_ORIGINS || ''
 const configuredOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean)
 
+// Orígenes de producción teleprt + legacy stream-in (rebrand)
+const prodOrigins = [
+  'https://teleprt.com',
+  'https://www.teleprt.com',
+  'https://front-teleprt.pages.dev',
+  'https://admin.teleprt.com',
+  'https://stream-in.com',
+  'https://www.stream-in.com',
+  'https://front-streamin.pages.dev',
+]
+
 // Orígenes de desarrollo siempre incluidos
 const devOrigins = [
   'http://localhost:3000',
@@ -56,8 +75,8 @@ const devOrigins = [
   'http://localhost:5000',
 ]
 
-// Combinar orígenes configurados con los de desarrollo
-const ALL_ALLOWED_ORIGINS = [...new Set([...configuredOrigins, ...devOrigins])]
+// Combinar orígenes configurados con los de producción y desarrollo
+const ALL_ALLOWED_ORIGINS = [...new Set([...configuredOrigins, ...prodOrigins, ...devOrigins])]
 
 console.log('📋 Modo:', mode)
 console.log('🌐 Orígenes permitidos:', ALL_ALLOWED_ORIGINS)
@@ -138,14 +157,14 @@ async function authorize() {
   return res.json()
 }
 
-async function getBucketId(apiUrl, authToken, bucketName) {
+async function getBucketId(apiUrl, authToken, accountId, bucketName) {
   const res = await fetch(`${apiUrl}/b2api/v3/b2_list_buckets`, {
     method: 'POST',
     headers: {
       Authorization: authToken,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ bucketName }),
+    body: JSON.stringify({ accountId, bucketName }),
   })
   if (!res.ok) {
     const err = await res.text()
@@ -157,14 +176,14 @@ async function getBucketId(apiUrl, authToken, bucketName) {
   return bucket.bucketId
 }
 
-async function updateBucketCors(apiUrl, authToken, bucketId, corsRules) {
+async function updateBucketCors(apiUrl, authToken, accountId, bucketId, corsRules) {
   const res = await fetch(`${apiUrl}/b2api/v3/b2_update_bucket`, {
     method: 'POST',
     headers: {
       Authorization: authToken,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ bucketId, corsRules }),
+    body: JSON.stringify({ accountId, bucketId, corsRules }),
   })
   if (!res.ok) {
     const err = await res.text()
@@ -176,13 +195,13 @@ async function updateBucketCors(apiUrl, authToken, bucketId, corsRules) {
 async function main() {
   console.log('🔐 Autorizando con Backblaze B2...')
   const auth = await authorize()
-  const { apiInfo, authorizationToken } = auth
+  const { apiInfo, authorizationToken, accountId } = auth
   const apiUrl = apiInfo?.storageApi?.apiUrl || auth.apiUrl
 
   console.log(`✅ Autorizado. API URL: ${apiUrl}`)
   console.log(`🪣 Buscando bucket: ${B2_BUCKET_NAME}`)
 
-  const bucketId = await getBucketId(apiUrl, authorizationToken, B2_BUCKET_NAME)
+  const bucketId = await getBucketId(apiUrl, authorizationToken, accountId, B2_BUCKET_NAME)
   console.log(`✅ Bucket encontrado: ${bucketId}`)
 
   console.log('⚙️  Configurando reglas CORS...')
@@ -190,7 +209,7 @@ async function main() {
   console.log('   Orígenes permitidos:', ALL_ALLOWED_ORIGINS)
   console.log('   Operaciones permitidas:', CORS_RULES[0].allowedOperations)
 
-  const result = await updateBucketCors(apiUrl, authorizationToken, bucketId, CORS_RULES)
+  const result = await updateBucketCors(apiUrl, authorizationToken, accountId, bucketId, CORS_RULES)
   console.log('✅ CORS configurado exitosamente')
   console.log('   Reglas aplicadas:', JSON.stringify(result.corsRules, null, 2))
 

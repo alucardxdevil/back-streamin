@@ -22,6 +22,12 @@ const PRESIGNED_URL_TTL = 900
 // Tamaño máximo del video en bytes (800 MB — beta teleprt.com)
 const MAX_VIDEO_SIZE = 800 * 1024 * 1024
 
+function buildRawVideoKey(userId, fileName) {
+  const uuid = uuidv4()
+  const ext = fileName.split('.').pop()?.toLowerCase() || 'mp4'
+  return `raw/${userId}/${Date.now()}-${uuid}.${ext}`
+}
+
 /**
  * POST /api/transcode/presigned-upload
  *
@@ -53,9 +59,7 @@ export const generateVideoUploadUrl = async (req, res, next) => {
     }
 
     // Generar key único para el archivo raw
-    const uuid = uuidv4()
-    const ext = fileName.split('.').pop()?.toLowerCase() || 'mp4'
-    const rawKey = `raw/${userId}/${Date.now()}-${uuid}.${ext}`
+    const rawKey = buildRawVideoKey(userId, fileName)
 
     // Generar presigned URL para PUT (subida directa)
     const command = new PutObjectCommand({

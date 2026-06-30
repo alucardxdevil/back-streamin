@@ -1,0 +1,38 @@
+[
+  {
+    "corsRuleName": "allowUploadAndRead",
+    "allowedOrigins": [
+      "https://teleprt.com",
+      "https://www.teleprt.com",
+      "https://front-teleprt.pages.dev",
+      "https://admin.teleprt.com",
+      "https://stream-in.com",
+      "https://www.stream-in.com",
+      "https://front-streamin.pages.dev",
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "http://localhost:5000"
+    ],
+    "allowedOperations": [
+      "s3_put",
+      "s3_post",
+      "s3_head",
+      "s3_get"
+    ],
+    "allowedHeaders": [
+      "content-type",
+      "content-length",
+      "x-amz-content-sha256",
+      "x-amz-date",
+      "authorization",
+      "range"
+    ],
+    "exposeHeaders": [
+      "ETag",
+      "x-amz-request-id",
+      "Content-Range",
+      "Accept-Ranges"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
